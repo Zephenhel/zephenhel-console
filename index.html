@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ZEPHENHEL CITADEL</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ZEPHENHEL CITADEL — Tri-Chain Splitter</title>
   <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 </head>
@@ -13,107 +13,120 @@
 
   <header class="topbar">
     <div class="brand">
-      <div class="sigil"></div>
-      <div>
+      <div class="sigil">Z</div>
+      <div class="brandText">
         <div class="title">ZEPHENHEL CITADEL</div>
-        <div class="subtitle">Mythic Tri-Chain Distribution Console</div>
+        <div class="sub">Mythic tri-chain splitter • BSC • Ethereum • Polygon</div>
       </div>
     </div>
 
-    <div class="chips">
-      <div class="chip" id="chainChip">CHAIN: <b>—</b></div>
-      <div class="chip" id="splitterChip">SPLITTER: <b>—</b></div>
-      <div class="chip" id="walletChip">WALLET: <b>DISCONNECTED</b></div>
-      <button class="btn btn-gold" id="connectBtn">CONNECT</button>
+    <div class="hud">
+      <div class="pill" id="netPill">Network: —</div>
+      <div class="pill" id="acctPill">Wallet: Disconnected</div>
+      <button class="btn gold" id="btnConnect">Connect</button>
+      <button class="btn" id="btnSwitch">Switch Network</button>
     </div>
   </header>
 
   <main class="grid">
+    <!-- LEFT: Control -->
     <section class="card">
-      <div class="card-h">Command Deck</div>
+      <div class="cardHead">
+        <div>
+          <div class="cardTitle">Splitter Command</div>
+          <div class="cardHint">Uses your deployed splitter for the active chain. Percent split must total 100.</div>
+        </div>
+        <div class="badge">Fee: <span class="tiny">1% (platform)</span></div>
+      </div>
 
       <div class="row2">
         <div class="field">
-          <label>Token Address (ERC20/BEP20)</label>
-          <input id="tokenAddress" placeholder="0x…" spellcheck="false" />
-          <div class="hint">Paste token address. Citadel will read symbol/decimals and pull USD price when available.</div>
+          <label>Mode</label>
+          <select id="mode">
+            <option value="split">Split (ERC20 / BEP20)</option>
+          </select>
         </div>
 
         <div class="field">
-          <label>Amount</label>
-          <div class="amountRow">
-            <input id="amountInput" placeholder="0.0" inputmode="decimal" />
-            <button class="btn btn-ghost" id="maxBtn">MAX</button>
-          </div>
-          <div class="hint" id="amountHint">MAX uses token balance (gas is paid in native coin).</div>
+          <label>Active Splitter Contract</label>
+          <input id="splitterAddr" type="text" readonly />
+          <div class="mini" id="splitterNote"></div>
         </div>
       </div>
 
-      <div class="row3">
-        <div class="info">
-          <div class="k">Token</div>
-          <div class="v mono" id="tokenMeta">—</div>
+      <div class="field">
+        <label>Token Contract Address</label>
+        <input id="tokenAddr" placeholder="0x… (ERC20/BEP20)" />
+        <div class="mini">
+          Tip: paste token contract for the same network you’re connected to.
         </div>
-        <div class="info">
-          <div class="k">Wallet Token Balance</div>
-          <div class="v mono" id="tokenBalance">—</div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label>Amount (token units)</label>
+          <div class="withBtn">
+            <input id="amount" placeholder="0.0" />
+            <button class="btn miniBtn" id="btnMax">MAX</button>
+          </div>
+          <div class="mini" id="amountHint">Gas is paid in the native coin (BNB/ETH/MATIC) separately.</div>
         </div>
-        <div class="info">
-          <div class="k">USD Estimate</div>
-          <div class="v mono" id="usdEstimate">—</div>
-          <div class="tiny">Platform fee: <span class="tinyGold">1%</span></div>
+
+        <div class="panel">
+          <div class="panelHead">
+            <div class="panelTitle">Token & Value</div>
+            <div class="chip" id="liveChip">LIVE</div>
+          </div>
+          <div class="kv">
+            <div class="k">Symbol</div><div class="v" id="tokSymbol">—</div>
+            <div class="k">Decimals</div><div class="v" id="tokDecimals">—</div>
+            <div class="k">Your token bal</div><div class="v" id="tokBal">—</div>
+            <div class="k">USD est</div><div class="v" id="usdEst">—</div>
+            <div class="k">Native bal</div><div class="v" id="nativeBal">—</div>
+          </div>
         </div>
       </div>
 
       <div class="divider"></div>
 
-      <div class="card-h">Recipients</div>
-      <div class="hint">Use simple percentages (0–100). Total must equal <b>100</b>.</div>
-
-      <div class="recHead">
-        <div>Address</div><div>%</div><div></div>
+      <div class="recipientsHead">
+        <div>
+          <div class="cardTitle">Recipients</div>
+          <div class="cardHint">Add/remove rows. Percent must total exactly 100.</div>
+        </div>
+        <div class="right">
+          <div class="pill" id="totalPill">Total: 0%</div>
+          <button class="btn" id="btnAdd">+ Add Recipient</button>
+        </div>
       </div>
+
       <div id="recipients"></div>
 
-      <div class="recFoot">
-        <div class="pill">TOTAL: <span id="totalPercent">0</span>%</div>
-        <button class="btn btn-ghost" id="addRecipientBtn">+ ADD RECIPIENT</button>
-      </div>
-
       <div class="actions">
-        <button class="btn btn-outline" id="approveBtn">APPROVE</button>
-        <button class="btn btn-gold big" id="executeBtn">EXECUTE SPLIT</button>
+        <button class="btn" id="btnApprove">Approve</button>
+        <button class="btn gold" id="btnSplit">Execute Split</button>
       </div>
 
-      <div class="banner" id="banner">System ready. Connect wallet to begin.</div>
+      <div class="status" id="statusBar">Ready.</div>
     </section>
 
+    <!-- RIGHT: Log + Safety -->
     <section class="card">
-      <div class="card-h">Intel Panel</div>
-
-      <div class="intel">
-        <div class="intelRow">
-          <div class="k">Wallet</div>
-          <div class="v mono" id="walletAddr">—</div>
+      <div class="cardHead">
+        <div>
+          <div class="cardTitle">Event / Status Log</div>
+          <div class="cardHint">If something fails, this is what we read first.</div>
         </div>
-        <div class="intelRow">
-          <div class="k">Native Balance</div>
-          <div class="v mono" id="nativeBalance">—</div>
-        </div>
-        <div class="intelRow">
-          <div class="k">Status</div>
-          <div class="v" id="statusLine">—</div>
-        </div>
+        <button class="btn" id="btnClear">Clear</button>
       </div>
 
-      <div class="divider"></div>
+      <pre class="log" id="log"></pre>
 
-      <div class="card-h">Runtime Log</div>
-      <pre class="log" id="logBox"></pre>
+      <div class="footnote">
+        Experimental frontend. Always test tiny amounts first.
+      </div>
     </section>
   </main>
-
-  <footer class="footer">Zephenhel © Citadel Console</footer>
 
   <script src="app.js"></script>
 </body>
