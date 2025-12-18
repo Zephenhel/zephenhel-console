@@ -1,21 +1,25 @@
-/* ZEPHENHEL CITADEL — Tri-Chain Splitter UI (GitHub Pages)
-   - Networks: BSC / ETH / POLY
-   - Connect + auto-switch chain
-   - ERC20 approve -> splitter
-   - Execute split using splitter contract function below
-   - DexScreener USD estimate
-*/
+const SPLITTER_ABI_CANDIDATES = [
+  // name variations (same params)
+  "function splitToken(address token, uint256 amount, address[] recipients, uint256[] percents) external",
+  "function split(address token, uint256 amount, address[] recipients, uint256[] percents) external",
+  "function distribute(address token, uint256 amount, address[] recipients, uint256[] percents) external",
+];
 
-/* ========= 1) CONFIG: YOUR SPLITTER ADDRESSES ========= */
+const ERC20_ABI = [
+  "function decimals() view returns (uint8)",
+  "function symbol() view returns (string)",
+  "function balanceOf(address) view returns (uint256)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+];
+
 const CHAINS = {
   BSC: {
     key: "BSC",
     name: "BSC",
     chainIdHex: "0x38",
-    chainIdDec: 56,
-    native: "BNB",
     dexChain: "bsc",
-    splitter: "0x928B75D0fA6382D4B742afB6e500C9458B4f502c", // <-- your BSC splitter (from your screenshot)
+    splitter: "0x928B75D0fA6382D4B742afB6e500C9458B4f502c",
     rpcAddParams: {
       chainId: "0x38",
       chainName: "BNB Smart Chain",
@@ -28,18 +32,14 @@ const CHAINS = {
     key: "ETH",
     name: "Ethereum",
     chainIdHex: "0x1",
-    chainIdDec: 1,
-    native: "ETH",
     dexChain: "ethereum",
     splitter: "PASTE_YOUR_ETH_SPLITTER_ADDRESS_HERE",
-    rpcAddParams: null // MetaMask always has ETH
+    rpcAddParams: null
   },
   POLY: {
     key: "POLY",
     name: "Polygon",
     chainIdHex: "0x89",
-    chainIdDec: 137,
-    native: "MATIC",
     dexChain: "polygon",
     splitter: "PASTE_YOUR_POLYGON_SPLITTER_ADDRESS_HERE",
     rpcAddParams: {
@@ -52,118 +52,89 @@ const CHAINS = {
   }
 };
 
-/* ========= 2) SPLITTER CONTRACT CALL (MATCH YOUR CONTRACT) =========
-   Your prior version “worked”, so keep the same function shape.
-   This UI calls:
-     splitter.splitToken(token, amountWei, recipients[], percents[])
-   If your function name differs, change SPLIT_FN below + ABI fragment.
-*/
-const SPLIT_FN = "splitToken";
-const SPLITTER_ABI = [
-  `function ${SPLIT_FN}(address token, uint256 amount, address[] calldata recipients, uint256[] calldata percents) external`,
-];
+const $ = (id) => document.getElementById(id);
 
-/* ERC20 ABI */
-const ERC20_ABI = [
-  "function decimals() view returns (uint8)",
-  "function symbol() view returns (string)",
-  "function name() view returns (string)",
-  "function allowance(address owner, address spender) view returns (uint256)",
-  "function approve(address spender, uint256 amount) returns (bool)"
-];
+const networkSelect = $("networkSelect");
+const connectBtn = $("connectBtn");
+const switchBtn = $("switchBtn");
+const visitDexBtn = $("visitDexBtn");
 
-/* ========= UI ELEMENTS ========= */
-const el = (id) => document.getElementById(id);
+const walletStatus = $("walletStatus");
+const splitterAddress = $("splitterAddress");
+const splitterShort = $("splitterShort");
 
-const networkSelect = el("networkSelect");
-const connectBtn = el("connectBtn");
-const walletStatus = el("walletStatus");
-const splitterAddress = el("splitterAddress");
-const tokenAddress = el("tokenAddress");
-const tokenAmount = el("tokenAmount");
-const tokenMeta = el("tokenMeta");
-const usdEstimate = el("usdEstimate");
-const usdHint = el("usdHint");
-const recipientsWrap = el("recipients");
-const addRecipientBtn = el("addRecipientBtn");
-const totalPct = el("totalPct");
-const approveBtn = el("approveBtn");
-const splitBtn = el("splitBtn");
-const logBox = el("log");
-const clearLogBtn = el("clearLogBtn");
+const tokenAddress = $("tokenAddress");
+const tokenAmount = $("tokenAmount");
+const usdEstimate = $("usdEstimate");
 
-let provider, signer, userAddress;
+const tokenSymbol = $("tokenSymbol");
+const tokenDecimals = $("tokenDecimals");
+const tokenPrice = $("tokenPrice");
+
+const tokenBalance = $("tokenBalance");
+const tokenBalanceUsd = $("tokenBalanceUsd");
+
+const allowanceEl = $("allowance");
+const approvalState = $("approvalState");
+
+const recipientsWrap = $("recipients");
+const addRecipientBtn = $("addRecipientBtn");
+const evenSplitBtn = $("evenSplitBtn");
+const autoFixBtn = $("autoFixBtn");
+const savePresetBtn = $("savePresetBtn");
+const loadPresetBtn = $("loadPresetBtn");
+const clearRecipientsBtn = $("clearRecipientsBtn");
+const totalPct = $("totalPct");
+
+const approveBtn = $("approveBtn");
+const splitBtn = $("splitBtn");
+
+const refreshIntelBtn = $("refreshIntelBtn");
+const clearLogBtn = $("clearLogBtn");
+const logBox = $("log");
+
 let currentChain = CHAINS.BSC;
-let tokenCache = { address: null, decimals: 18, symbol: "TOKEN", priceUsd: null };
 
-/* ========= HELPERS ========= */
+let provider = null;
+let signer = null;
+let userAddress = null;
+
+let tokenCache = {
+  address: null,
+  decimals: 18,
+  symbol: null,
+  priceUsd: null
+};
+
 function log(msg, type="info"){
   const t = new Date().toLocaleTimeString();
-  const prefix = type === "err" ? "✖" : type === "ok" ? "✔" : "•";
-  logBox.textContent += `[${t}] ${prefix} ${msg}\n`;
+  const icon = type === "err" ? "✖" : type === "ok" ? "✔" : type === "warn" ? "!" : "•";
+  logBox.textContent += `[${t}] ${icon} ${msg}\n`;
   logBox.scrollTop = logBox.scrollHeight;
 }
 
-function shortAddr(a){
-  if(!a) return "";
-  return a.slice(0,6) + "…" + a.slice(-4);
+function setBadge(text, kind="dim"){
+  approvalState.textContent = text;
+  approvalState.style.color =
+    kind === "ok" ? "var(--ok)" :
+    kind === "bad" ? "var(--bad)" :
+    kind === "warn" ? "var(--warn)" :
+    "var(--muted)";
 }
 
-function setWalletStatus(text, ok=false){
-  walletStatus.textContent = text;
-  walletStatus.style.color = ok ? "var(--ok)" : "var(--text)";
+function shortAddr(a){
+  if(!a) return "—";
+  return a.slice(0,6) + "…" + a.slice(-4);
 }
 
 function isAddr(a){
   try { return ethers.utils.isAddress(a); } catch { return false; }
 }
 
-function getRecipientRows(){
-  return Array.from(recipientsWrap.querySelectorAll(".rec-row"));
-}
-
-function calcTotalPct(){
-  let total = 0;
-  for(const row of getRecipientRows()){
-    const pct = Number(row.querySelector(".pct").value || 0);
-    total += pct;
-  }
-  totalPct.textContent = `${total}%`;
-  totalPct.style.color = (total === 100) ? "var(--ok)" : "var(--gold2)";
-  return total;
-}
-
-function addRecipientRow(address="", pct=""){
-  const row = document.createElement("div");
-  row.className = "rec-row";
-
-  row.innerHTML = `
-    <input class="input mono addr" type="text" placeholder="Recipient 0x..." value="${address}" />
-    <input class="input pct" type="number" min="0" max="100" step="1" placeholder="%" value="${pct}" />
-    <button class="btn btn-ghost remove">REMOVE</button>
-  `;
-
-  row.querySelector(".remove").addEventListener("click", () => {
-    row.remove();
-    calcTotalPct();
-    updateUsdEstimate();
-  });
-
-  row.querySelector(".pct").addEventListener("input", () => {
-    calcTotalPct();
-    updateUsdEstimate();
-  });
-  row.querySelector(".addr").addEventListener("input", () => updateUsdEstimate());
-
-  recipientsWrap.appendChild(row);
-  calcTotalPct();
-}
-
-/* ========= NETWORK SWITCH ========= */
 async function ensureMetaMask(){
   if(!window.ethereum){
-    log("MetaMask not detected. Install/enable it, then refresh.", "err");
-    alert("MetaMask not detected. Please install/enable MetaMask and refresh.");
+    alert("MetaMask not detected. Please install/enable MetaMask then refresh.");
+    log("MetaMask not detected.", "err");
     return false;
   }
   return true;
@@ -179,8 +150,7 @@ async function switchToChain(chain){
     });
     return true;
   }catch(e){
-    // If chain not added (BSC/Polygon), try add
-    if(e && (e.code === 4902) && chain.rpcAddParams){
+    if(e && e.code === 4902 && chain.rpcAddParams){
       try{
         await window.ethereum.request({
           method: "wallet_addEthereumChain",
@@ -188,17 +158,42 @@ async function switchToChain(chain){
         });
         return true;
       }catch(addErr){
-        log(`Could not add ${chain.name}: ${addErr.message || addErr}`, "err");
+        log(`Add chain failed: ${addErr.message || addErr}`, "err");
         return false;
       }
     }
-    log(`Could not switch to ${chain.name}: ${e.message || e}`, "err");
+    log(`Switch chain failed: ${e.message || e}`, "err");
     return false;
   }
 }
 
-/* ========= CONNECT ========= */
-async function connect(){
+function setChain(key){
+  currentChain = CHAINS[key];
+  splitterAddress.value = currentChain.splitter;
+  splitterShort.textContent = shortAddr(currentChain.splitter);
+  tokenCache.address = null;
+  renderTokenIntelBlank();
+  renderWalletIntelBlank();
+  renderApprovalBlank();
+  updateUsdEstimateOnly();
+  log(`Network selected: ${currentChain.name}`, "info");
+}
+
+function renderTokenIntelBlank(){
+  tokenSymbol.textContent = "—";
+  tokenDecimals.textContent = "—";
+  tokenPrice.textContent = "—";
+}
+function renderWalletIntelBlank(){
+  tokenBalance.textContent = "—";
+  tokenBalanceUsd.textContent = "—";
+}
+function renderApprovalBlank(){
+  allowanceEl.textContent = "—";
+  setBadge("—", "dim");
+}
+
+async function connectWallet(){
   if(!await ensureMetaMask()) return;
 
   const ok = await switchToChain(currentChain);
@@ -209,236 +204,366 @@ async function connect(){
   signer = provider.getSigner();
   userAddress = await signer.getAddress();
 
-  setWalletStatus(shortAddr(userAddress), true);
+  walletStatus.textContent = shortAddr(userAddress);
+  walletStatus.style.color = "var(--ok)";
   connectBtn.textContent = "CONNECTED";
   connectBtn.disabled = true;
 
-  log(`Wallet connected: ${userAddress}`, "ok");
+  log(`Connected wallet: ${userAddress}`, "ok");
 
-  // React to account/network changes
-  window.ethereum.on("accountsChanged", async (accounts) => {
-    if(!accounts || !accounts.length){
-      location.reload();
-      return;
-    }
-    userAddress = accounts[0];
-    setWalletStatus(shortAddr(userAddress), true);
-    log(`Account changed: ${userAddress}`, "info");
-    tokenCache.address = null;
-    await refreshTokenMeta();
-  });
+  window.ethereum.on("accountsChanged", () => location.reload());
+  window.ethereum.on("chainChanged", () => location.reload());
 
-  window.ethereum.on("chainChanged", async () => {
-    log("Chain changed. Reloading to resync.", "info");
-    location.reload();
-  });
-
-  await refreshTokenMeta();
+  await refreshAllIntel();
 }
 
-/* ========= TOKEN META + DEXSCREENER PRICE ========= */
-async function fetchDexPriceUsd(chainSlug, token){
+async function fetchDexPriceUsd(token){
   try{
-    const url = `https://api.dexscreener.com/latest/dex/tokens/${token}`;
-    const res = await fetch(url);
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${token}`);
     const data = await res.json();
-    const pairs = (data && data.pairs) ? data.pairs : [];
-    // pick first pair that matches the chain
-    const p = pairs.find(x => (x.chainId || "").toLowerCase() === chainSlug.toLowerCase())
-           || pairs.find(x => (x.chainId || "").toLowerCase().includes(chainSlug.toLowerCase()))
-           || pairs[0];
-
-    if(p && p.priceUsd) return Number(p.priceUsd);
-  }catch(e){
-    // ignore
+    const pairs = data?.pairs || [];
+    const p =
+      pairs.find(x => (x.chainId || "").toLowerCase() === currentChain.dexChain) ||
+      pairs[0];
+    return p?.priceUsd ? Number(p.priceUsd) : null;
+  }catch{
+    return null;
   }
-  return null;
 }
 
-async function refreshTokenMeta(){
+async function refreshTokenIntel(){
   const addr = (tokenAddress.value || "").trim();
   if(!isAddr(addr)){
-    tokenMeta.textContent = "Token — Decimals — Price —";
-    tokenCache = { address: null, decimals: 18, symbol: "TOKEN", priceUsd: null };
-    updateUsdEstimate();
-    return;
-  }
-
-  if(tokenCache.address && tokenCache.address.toLowerCase() === addr.toLowerCase()){
-    updateUsdEstimate();
+    tokenCache.address = null;
+    renderTokenIntelBlank();
+    updateUsdEstimateOnly();
     return;
   }
 
   try{
-    if(!signer){
-      // allow reading without connect? try public provider via MetaMask if possible
-      provider = new ethers.providers.Web3Provider(window.ethereum, "any");
-      signer = provider.getSigner();
-    }
+    if(!provider) provider = new ethers.providers.Web3Provider(window.ethereum, "any");
     const token = new ethers.Contract(addr, ERC20_ABI, provider);
+
     const [decimals, symbol] = await Promise.all([token.decimals(), token.symbol()]);
     tokenCache.address = addr;
     tokenCache.decimals = decimals;
     tokenCache.symbol = symbol;
 
-    tokenMeta.textContent = `${symbol} — Decimals: ${decimals} — Price: loading…`;
+    tokenSymbol.textContent = symbol;
+    tokenDecimals.textContent = String(decimals);
+    tokenPrice.textContent = "Loading…";
 
-    const price = await fetchDexPriceUsd(currentChain.dexChain, addr);
+    const price = await fetchDexPriceUsd(addr);
     tokenCache.priceUsd = price;
+    tokenPrice.textContent = price ? `$${price}` : "N/A";
 
-    tokenMeta.textContent = `${symbol} — Decimals: ${decimals} — Price: ${price ? `$${price}` : "N/A"}`;
-    log(`Token loaded: ${symbol} (decimals ${decimals}) | price ${price ? `$${price}` : "N/A"}`, "ok");
-
-    updateUsdEstimate();
+    updateUsdEstimateOnly();
   }catch(e){
-    log(`Token meta error: ${e.message || e}`, "err");
-    tokenMeta.textContent = "Token — Decimals — Price —";
-    tokenCache = { address: null, decimals: 18, symbol: "TOKEN", priceUsd: null };
-    updateUsdEstimate();
+    log(`Token intel failed: ${e.message || e}`, "err");
+    tokenCache.address = null;
+    renderTokenIntelBlank();
   }
 }
 
-function updateUsdEstimate(){
-  const amt = Number(tokenAmount.value || 0);
-  const price = tokenCache.priceUsd;
-  if(!amt || amt <= 0 || !price){
-    usdEstimate.textContent = "$0.00";
-    usdHint.textContent = price ? "Enter amount" : "Price unavailable (DexScreener)";
+async function refreshWalletIntel(){
+  if(!userAddress || !provider) return;
+  const addr = (tokenAddress.value || "").trim();
+  if(!isAddr(addr) || !tokenCache.address){
+    renderWalletIntelBlank();
     return;
   }
-  const est = amt * price;
-  usdEstimate.textContent = est.toLocaleString(undefined, { style:"currency", currency:"USD" });
-  usdHint.textContent = `≈ ${amt} ${tokenCache.symbol} @ $${price}`;
+  try{
+    const token = new ethers.Contract(addr, ERC20_ABI, provider);
+    const balWei = await token.balanceOf(userAddress);
+    const bal = Number(ethers.utils.formatUnits(balWei, tokenCache.decimals));
+    tokenBalance.textContent = `${bal.toLocaleString(undefined,{maximumFractionDigits:6})} ${tokenCache.symbol||""}`;
+
+    if(tokenCache.priceUsd){
+      const usd = bal * tokenCache.priceUsd;
+      tokenBalanceUsd.textContent = usd.toLocaleString(undefined,{style:"currency",currency:"USD"});
+    } else tokenBalanceUsd.textContent = "N/A";
+  }catch(e){
+    log(`Wallet balance failed: ${e.message || e}`, "err");
+    renderWalletIntelBlank();
+  }
 }
 
-/* ========= APPROVE + SPLIT ========= */
-function validateSplitInputs(){
-  const token = (tokenAddress.value || "").trim();
-  if(!isAddr(token)) return { ok:false, msg:"Invalid token address." };
+async function refreshAllowanceIntel(){
+  if(!userAddress || !provider) return;
+  const addr = (tokenAddress.value || "").trim();
+  if(!isAddr(addr) || !tokenCache.address){
+    renderApprovalBlank();
+    return;
+  }
+  try{
+    const token = new ethers.Contract(addr, ERC20_ABI, provider);
+    const allowanceWei = await token.allowance(userAddress, currentChain.splitter);
+    const allowance = Number(ethers.utils.formatUnits(allowanceWei, tokenCache.decimals));
+    allowanceEl.textContent = allowance.toLocaleString(undefined,{maximumFractionDigits:6});
 
-  const amt = tokenAmount.value;
-  if(!amt || Number(amt) <= 0) return { ok:false, msg:"Enter an amount > 0." };
+    const needed = Number(tokenAmount.value || 0);
+    if(!needed || needed <= 0){ setBadge("ENTER AMOUNT","warn"); return; }
+    setBadge(allowance >= needed ? "APPROVED" : "APPROVE NEEDED", allowance >= needed ? "ok" : "bad");
+  }catch(e){
+    log(`Allowance failed: ${e.message || e}`, "err");
+    renderApprovalBlank();
+  }
+}
 
-  const rows = getRecipientRows();
-  if(rows.length < 1) return { ok:false, msg:"Add at least 1 recipient." };
+async function refreshAllIntel(){
+  await refreshTokenIntel();
+  await refreshWalletIntel();
+  await refreshAllowanceIntel();
+}
 
-  const recipients = [];
-  const percents = [];
+function updateUsdEstimateOnly(){
+  const amt = Number(tokenAmount.value || 0);
+  if(!amt || amt <= 0){ usdEstimate.textContent = "$0.00"; return; }
+  if(!tokenCache.priceUsd){ usdEstimate.textContent = "USD: N/A"; return; }
+  usdEstimate.textContent = (amt * tokenCache.priceUsd).toLocaleString(undefined,{style:"currency",currency:"USD"});
+}
+
+function getRows(){ return Array.from(recipientsWrap.querySelectorAll(".rec-row")); }
+
+function calcTotal(){
+  let t=0;
+  for(const r of getRows()) t += Number(r.querySelector(".pct").value || 0);
+  totalPct.textContent = `${t}%`;
+  totalPct.style.color = (t===100) ? "var(--ok)" : "var(--gold2)";
+  return t;
+}
+
+function addRecipientRow(address="", pct=""){
+  const row = document.createElement("div");
+  row.className="rec-row";
+  row.innerHTML = `
+    <input class="input mono addr" placeholder="Recipient 0x..." value="${address}" />
+    <input class="input pct" type="number" min="0" max="100" step="1" placeholder="%" value="${pct}" />
+    <button class="btn btn-ghost remove">REMOVE</button>
+  `;
+  row.querySelector(".remove").addEventListener("click", ()=>{ row.remove(); calcTotal(); });
+  row.querySelector(".pct").addEventListener("input", ()=>calcTotal());
+  recipientsWrap.appendChild(row);
+  calcTotal();
+}
+
+function evenSplit(){
+  const rows=getRows(); if(!rows.length) return;
+  const base=Math.floor(100/rows.length);
+  let rem=100-base*rows.length;
   for(const r of rows){
-    const a = (r.querySelector(".addr").value || "").trim();
-    const p = Number(r.querySelector(".pct").value || 0);
+    const v=base+(rem>0?1:0);
+    if(rem>0) rem--;
+    r.querySelector(".pct").value=v;
+  }
+  calcTotal();
+}
 
-    if(!isAddr(a)) return { ok:false, msg:"One of the recipient addresses is invalid." };
-    if(p <= 0) return { ok:false, msg:"Each recipient must have a percent > 0." };
+function autoFixTo100(){
+  const rows=getRows(); if(!rows.length) return;
+  let p=rows.map(r=>Math.max(0,Number(r.querySelector(".pct").value||0)));
+  let sum=p.reduce((a,b)=>a+b,0);
+  if(sum===0){ evenSplit(); return; }
+  let norm=p.map(x=>(x/sum)*100);
+  let rounded=norm.map(x=>Math.floor(x));
+  let rsum=rounded.reduce((a,b)=>a+b,0);
+  let leftover=100-rsum;
+  const frac=norm.map((x,i)=>({i,f:x-Math.floor(x)})).sort((a,b)=>b.f-a.f);
+  for(let k=0;k<leftover;k++) rounded[frac[k%frac.length].i]+=1;
+  rows.forEach((r,i)=>r.querySelector(".pct").value=rounded[i]);
+  calcTotal();
+}
 
+function clearRecipients(){ recipientsWrap.innerHTML=""; calcTotal(); }
+
+function validateInputs(){
+  if(!signer || !userAddress) return {ok:false,msg:"Connect wallet first."};
+  if(!isAddr(currentChain.splitter)) return {ok:false,msg:"Splitter address missing for this chain."};
+
+  const token=(tokenAddress.value||"").trim();
+  if(!isAddr(token)) return {ok:false,msg:"Invalid token address."};
+
+  const amtStr=String(tokenAmount.value||"");
+  const amtNum=Number(amtStr);
+  if(!amtStr || !amtNum || amtNum<=0) return {ok:false,msg:"Enter an amount > 0."};
+
+  const rows=getRows();
+  if(rows.length<1) return {ok:false,msg:"Add at least 1 recipient."};
+
+  const recipients=[], percents=[];
+  for(const r of rows){
+    const a=(r.querySelector(".addr").value||"").trim();
+    const p=Number(r.querySelector(".pct").value||0);
+    if(!isAddr(a)) return {ok:false,msg:"One recipient address is invalid."};
+    if(p<=0) return {ok:false,msg:"Each recipient % must be > 0."};
     recipients.push(a);
     percents.push(p);
   }
 
-  const total = percents.reduce((x,y)=>x+y,0);
-  if(total !== 100) return { ok:false, msg:`Total percent must equal 100. Current: ${total}.` };
+  const total=percents.reduce((a,b)=>a+b,0);
+  if(total!==100) return {ok:false,msg:`Total % must equal 100. Current: ${total}.`};
 
-  return { ok:true, token, amt: String(amt), recipients, percents };
+  return {ok:true, token, amtStr, recipients, percents};
 }
 
 async function approve(){
-  if(!signer) return alert("Connect wallet first.");
-  const v = validateSplitInputs();
-  if(!v.ok) return alert(v.msg);
-
+  const v=validateInputs(); if(!v.ok) return alert(v.msg);
   try{
-    approveBtn.disabled = true;
-    approveBtn.textContent = "APPROVING…";
-
-    const token = new ethers.Contract(v.token, ERC20_ABI, signer);
-    const amountWei = ethers.utils.parseUnits(v.amt, tokenCache.decimals);
-
-    // Approve EXACT amount (simple + safe)
-    const tx = await token.approve(currentChain.splitter, amountWei);
-    log(`Approve sent: ${tx.hash}`, "info");
+    approveBtn.disabled=true; approveBtn.textContent="APPROVING…";
+    const token=new ethers.Contract(v.token, ERC20_ABI, signer);
+    const amountWei=ethers.utils.parseUnits(v.amtStr, tokenCache.decimals);
+    const tx=await token.approve(currentChain.splitter, amountWei);
+    log(`Approve sent: ${tx.hash}`);
     await tx.wait();
-    log("Approve confirmed.", "ok");
+    log("Approve confirmed.","ok");
+    await refreshAllowanceIntel();
     alert("Approve confirmed.");
   }catch(e){
-    log(`Approve failed: ${e.message || e}`, "err");
-    alert(`Approve failed: ${e.message || e}`);
+    log(`Approve failed: ${e.message||e}`,"err");
+    alert(`Approve failed: ${e.message||e}`);
   }finally{
-    approveBtn.disabled = false;
-    approveBtn.textContent = "APPROVE";
+    approveBtn.disabled=false; approveBtn.textContent="APPROVE";
   }
 }
 
-async function executeSplit(){
-  if(!signer) return alert("Connect wallet first.");
-  const v = validateSplitInputs();
-  if(!v.ok) return alert(v.msg);
+/** Try (method x scale) with callStatic first to find a combination that won't revert */
+async function findWorkingSplitCall(splitter, token, amountWei, recipients, percents100){
+  // Two percent modes: 100-scale and 10000-bps
+  const percentsBps = percents100.map(p => Math.round(p * 100));
+
+  const tries = [
+    { label: "percents=100", percents: percents100 },
+    { label: "percents=bps(10000)", percents: percentsBps },
+  ];
+
+  for (const abi of SPLITTER_ABI_CANDIDATES) {
+    const c = new ethers.Contract(splitter.address, [abi], splitter.signer);
+    const fnName = Object.keys(c.interface.functions)[0].split("(")[0];
+
+    for (const t of tries) {
+      try{
+        await c.callStatic[fnName](token, amountWei, recipients, t.percents);
+        return { contract: c, fnName, percents: t.percents, mode: t.label };
+      }catch(e){
+        // keep trying
+      }
+    }
+  }
+  return null;
+}
+
+async function split(){
+  const v=validateInputs(); if(!v.ok) return alert(v.msg);
 
   try{
-    splitBtn.disabled = true;
-    splitBtn.textContent = "EXECUTING…";
+    splitBtn.disabled=true; splitBtn.textContent="EXECUTING…";
 
-    const amountWei = ethers.utils.parseUnits(v.amt, tokenCache.decimals);
+    const splitter = new ethers.Contract(currentChain.splitter, SPLITTER_ABI_CANDIDATES, signer);
+    const amountWei = ethers.utils.parseUnits(v.amtStr, tokenCache.decimals);
 
-    const splitter = new ethers.Contract(currentChain.splitter, SPLITTER_ABI, signer);
+    log("Testing splitter call (auto-detect signature + percent units)…","warn");
+    const found = await findWorkingSplitCall(splitter, v.token, amountWei, v.recipients, v.percents);
 
-    // If your splitter uses a different function name/signature,
-    // change SPLIT_FN + SPLITTER_ABI at the top.
-    const tx = await splitter[SPLIT_FN](v.token, amountWei, v.recipients, v.percents);
-    log(`Split sent: ${tx.hash}`, "info");
+    if(!found){
+      log("No compatible splitter function found OR it still reverts. This means the on-chain contract expects different params/logic.", "err");
+      alert("Split failed: Contract reverted. Your splitter likely uses a different function signature (or requires % in a different format).");
+      return;
+    }
+
+    log(`Detected: ${found.fnName} with ${found.mode}`, "ok");
+
+    const tx = await found.contract[found.fnName](v.token, amountWei, v.recipients, found.percents);
+    log(`Split sent: ${tx.hash}`);
     await tx.wait();
-    log("Split confirmed.", "ok");
+    log("Split confirmed.","ok");
     alert("Split confirmed.");
   }catch(e){
-    log(`Split failed: ${e.message || e}`, "err");
-    alert(`Split failed: ${e.message || e}`);
+    log(`Split failed: ${e.message||e}`,"err");
+    alert(`Split failed: ${e.message||e}`);
   }finally{
-    splitBtn.disabled = false;
-    splitBtn.textContent = "EXECUTE SPLIT";
+    splitBtn.disabled=false; splitBtn.textContent="EXECUTE SPLIT";
   }
 }
 
-/* ========= INIT ========= */
-function setChain(key){
-  currentChain = CHAINS[key];
-  splitterAddress.value = currentChain.splitter;
-  log(`Network set: ${currentChain.name}`, "info");
-  tokenCache.address = null; // force refresh
-  refreshTokenMeta();
+function savePreset(){
+  const rows=getRows().map(r=>({
+    address:(r.querySelector(".addr").value||"").trim(),
+    pct:Number(r.querySelector(".pct").value||0)
+  }));
+  const payload={chain:currentChain.key, token:(tokenAddress.value||"").trim(), recipients:rows};
+  localStorage.setItem("zephenhel_citadel_preset", JSON.stringify(payload));
+  log("Preset saved.","ok");
+  alert("Preset saved.");
+}
+
+function loadPreset(){
+  const raw=localStorage.getItem("zephenhel_citadel_preset");
+  if(!raw) return alert("No preset saved yet.");
+  try{
+    const payload=JSON.parse(raw);
+    if(payload.chain && CHAINS[payload.chain]){
+      networkSelect.value=payload.chain;
+      setChain(payload.chain);
+    }
+    if(payload.token) tokenAddress.value=payload.token;
+    clearRecipients();
+    (payload.recipients||[]).forEach(r=>addRecipientRow(r.address||"", r.pct||""));
+    calcTotal();
+    log("Preset loaded.","ok");
+    refreshAllIntel();
+  }catch{
+    alert("Preset corrupted.");
+  }
+}
+
+function openDex(){
+  const t=(tokenAddress.value||"").trim();
+  if(!isAddr(t)) return alert("Enter token address first.");
+  window.open(`https://dexscreener.com/${currentChain.dexChain}/${t}`,"_blank");
 }
 
 function init(){
-  // default recipients (you can remove these anytime)
   addRecipientRow("", "");
   addRecipientRow("", "");
-
   setChain(networkSelect.value);
 
-  networkSelect.addEventListener("change", async () => {
-    setChain(networkSelect.value);
+  connectBtn.addEventListener("click", connectWallet);
+  switchBtn.addEventListener("click", async ()=>{ const ok=await switchToChain(currentChain); if(ok) log(`Switched to ${currentChain.name}.`,"ok"); });
+  visitDexBtn.addEventListener("click", openDex);
 
-    // if already connected, switch chain immediately
+  networkSelect.addEventListener("change", ()=>{
+    setChain(networkSelect.value);
     if(userAddress){
-      connectBtn.disabled = false;
-      connectBtn.textContent = "CONNECT";
-      setWalletStatus("Disconnected", false);
-      provider = null; signer = null; userAddress = null;
-      await connect();
+      connectBtn.disabled=false;
+      connectBtn.textContent="CONNECT WALLET";
+      walletStatus.textContent="Disconnected";
+      walletStatus.style.color="var(--muted)";
+      provider=null; signer=null; userAddress=null;
+      log("Network changed. Reconnect wallet.","warn");
     }
   });
 
-  connectBtn.addEventListener("click", connect);
-  addRecipientBtn.addEventListener("click", () => addRecipientRow("", ""));
+  tokenAddress.addEventListener("input", ()=>refreshAllIntel());
+  tokenAmount.addEventListener("input", async ()=>{
+    updateUsdEstimateOnly();
+    await refreshAllowanceIntel();
+  });
+
+  addRecipientBtn.addEventListener("click", ()=>addRecipientRow("", ""));
+  evenSplitBtn.addEventListener("click", evenSplit);
+  autoFixBtn.addEventListener("click", autoFixTo100);
+  clearRecipientsBtn.addEventListener("click", ()=>{ clearRecipients(); addRecipientRow("", ""); addRecipientRow("", ""); });
+
+  savePresetBtn.addEventListener("click", savePreset);
+  loadPresetBtn.addEventListener("click", loadPreset);
+
   approveBtn.addEventListener("click", approve);
-  splitBtn.addEventListener("click", executeSplit);
+  splitBtn.addEventListener("click", split);
 
-  tokenAddress.addEventListener("input", () => refreshTokenMeta());
-  tokenAmount.addEventListener("input", () => updateUsdEstimate());
+  refreshIntelBtn.addEventListener("click", refreshAllIntel);
+  clearLogBtn.addEventListener("click", ()=>logBox.textContent="");
 
-  clearLogBtn.addEventListener("click", () => logBox.textContent = "");
-
-  splitterAddress.value = currentChain.splitter;
-
-  log("Boot complete. Select network → Connect → Paste token → Set recipients → Approve → Execute.", "ok");
+  log("Boot complete. Connect → Token → Amount → Recipients → Approve → Execute.","ok");
 }
 
 init();
