@@ -1,7 +1,7 @@
 /* global ethers */
 
 (() => {
-  // ====== YOUR SPLITTERS ======
+  // ====== YOUR SPLITTERS (as provided) ======
   const SPLITTERS = {
     bsc: "0x928B75D0fA6382D4B742afB6e500C9458B4f502c",
     eth: "0x56FeE96eF295Cf282490592403B9A3C1304b91d2",
@@ -14,13 +14,11 @@
     polygon: { chainId: 137, hex: "0x89", name: "Polygon", native: "MATIC", gasReserve: "0.02" }
   };
 
-  // Platform fee shown & used for auto-adjust. (UI/logic only, contract is already fee’d.)
-  const PLATFORM_FEE_PCT = 1;
+  // ====== IMPORTANT: Your splitters expect BASIS POINTS ======
+  // user types 50/50 -> we send 5000/5000. Sum must be 10000.
+  const BPS_TOTAL = 10000;
 
-  // Percent scale candidates (some contracts use 100, some 10000, etc.)
-  const SCALE_CANDIDATES = [100, 10000, 100000];
-
-  // ====== Minimal ABIs ======
+  // ====== ABIs ======
   const ERC20_ABI = [
     "function symbol() view returns (string)",
     "function decimals() view returns (uint8)",
@@ -29,7 +27,7 @@
     "function approve(address spender,uint256 amount) returns (bool)"
   ];
 
-  // Your splitter function signature (common pattern)
+  // Keep the same function names you were using successfully earlier:
   const SPLITTER_ABI = [
     "function splitToken(address token,uint256 amount,address[] recipients,uint256[] percents) external",
     "function splitNative(address[] recipients,uint256[] percents) external payable"
@@ -75,15 +73,13 @@
   // ====== State ======
   let provider, signer;
   let account = null;
-
   let currentNetKey = "bsc";
   let activeChainId = null;
 
-  let token = null; // ethers.Contract
+  let token = null;
   let tokenMeta = { symbol: "-", decimals: 18 };
-  let tokenPriceUSD = null; // number
+  let tokenPriceUSD = null;
 
-  // Recipients state
   let recipients = [
     { addr: "", pct: 50 },
     { addr: "", pct: 50 }
@@ -91,7 +87,7 @@
 
   // ====== Sound FX (WebAudio) ======
   function playPing() {
-    if (!soundToggle.checked) return;
+    if (!soundToggle?.checked) return;
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       const o = ctx.createOscillator();
@@ -100,7 +96,7 @@
       o.frequency.setValueAtTime(880, ctx.currentTime);
       o.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.18);
       g.gain.setValueAtTime(0.001, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.22, ctx.currentTime + 0.02);
       g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
       o.connect(g); g.connect(ctx.destination);
       o.start();
@@ -110,8 +106,8 @@
   }
 
   function playCoins(n) {
-    if (!soundToggle.checked) return;
-    const hits = Math.max(1, Math.min(12, n)); // cap so it doesn't get insane
+    if (!soundToggle?.checked) return;
+    const hits = Math.max(1, Math.min(12, n));
     let i = 0;
     const tick = () => {
       i++;
@@ -124,7 +120,7 @@
         o.frequency.setValueAtTime(base, ctx.currentTime);
         o.frequency.exponentialRampToValueAtTime(base * 0.75, ctx.currentTime + 0.07);
         g.gain.setValueAtTime(0.001, ctx.currentTime);
-        g.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.16, ctx.currentTime + 0.01);
         g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.09);
         o.connect(g); g.connect(ctx.destination);
         o.start();
@@ -162,22 +158,9 @@
     try { return ethers.utils.isAddress(a); } catch { return false; }
   }
 
-  function bn(x) { return ethers.BigNumber.from(x); }
-
   function toFloatSafe(s) {
     const v = Number(String(s).replace(/,/g, ""));
     return Number.isFinite(v) ? v : 0;
-  }
-
-  function setTopPills() {
-    const c = CHAIN[currentNetKey];
-    netPill.textContent = `Network: ${c.name} (chainId ${c.chainId})`;
-    acctPill.textContent = account ? `Wallet: ${fmtAddr(account)}` : "Wallet: Disconnected";
-    splitterAddrEl.textContent = SPLITTERS[currentNetKey];
-  }
-
-  function currentSplitter() {
-    return new ethers.Contract(SPLITTERS[currentNetKey], SPLITTER_ABI, signer);
   }
 
   function nativeSymbol() {
@@ -188,6 +171,13 @@
     return tokenAddr.value.trim() === "";
   }
 
+  function setTopPills() {
+    const c = CHAIN[currentNetKey];
+    netPill.textContent = `Network: ${c.name} (chainId ${c.chainId})`;
+    acctPill.textContent = account ? `Wallet: ${fmtAddr(account)}` : "Wallet: Disconnected";
+    splitterAddrEl.textContent = SPLITTERS[currentNetKey];
+  }
+
   function setGasHint() {
     const reserve = CHAIN[currentNetKey].gasReserve;
     gasHint.textContent = tokenIsNative()
@@ -195,7 +185,25 @@
       : `MAX is for native only. For tokens, enter a token amount.`;
   }
 
-  // ====== UI: Recipients ======
+  function currentSplitter() {
+    return new ethers.Contract(SPLITTERS[currentNetKey], SPLITTER_ABI, signer);
+  }
+
+  function prettyRpcError(e) {
+    // dig out the real revert reason when possible
+    const msg =
+      e?.error?.message ||
+      e?.data?.message ||
+      e?.reason ||
+      e?.message ||
+      String(e);
+
+    // shorten but keep the useful part
+    const cleaned = msg.replace(/\s+/g, " ").trim();
+    return cleaned.length > 220 ? cleaned.slice(0, 220) + "…" : cleaned;
+  }
+
+  // ====== Recipients UI ======
   function renderRecipients() {
     recList.innerHTML = "";
     recipients.forEach((r, idx) => {
@@ -206,9 +214,7 @@
       addr.className = "in";
       addr.placeholder = "0xRecipient…";
       addr.value = r.addr;
-      addr.oninput = () => {
-        recipients[idx].addr = addr.value.trim();
-      };
+      addr.oninput = () => recipients[idx].addr = addr.value.trim();
 
       const pct = document.createElement("input");
       pct.className = "in";
@@ -224,7 +230,6 @@
       const rm = document.createElement("button");
       rm.className = "xbtn";
       rm.textContent = "✕";
-      rm.title = "Remove recipient";
       rm.onclick = () => {
         recipients.splice(idx, 1);
         renderRecipients();
@@ -245,17 +250,44 @@
     return total;
   }
 
+  function validateRecipients() {
+    if (recipients.length < 1) throw new Error("Add at least 1 recipient.");
+    const bad = recipients.find(r => !isAddr(r.addr));
+    if (bad) throw new Error("One or more recipient addresses are invalid.");
+  }
+
+  // ====== Percent conversion (THIS is the key fix) ======
+  function buildBasisPointsArray() {
+    // user must total 100%
+    const pcts = recipients.map(r => Number(r.pct) || 0);
+    const total = pcts.reduce((a, b) => a + b, 0);
+    if (Math.abs(total - 100) > 0.0001) throw new Error("Total percent must equal 100.");
+
+    // convert to bps and ensure sum==10000 via remainder fix
+    const raw = pcts.map(p => Math.floor((p / 100) * BPS_TOTAL));
+    let sum = raw.reduce((a, b) => a + b, 0);
+    let rem = BPS_TOTAL - sum;
+
+    // add remainder to highest percents first
+    const order = pcts.map((p, i) => ({ p, i })).sort((a, b) => b.p - a.p);
+    let k = 0;
+    while (rem > 0) {
+      raw[order[k % order.length].i] += 1;
+      rem--;
+      k++;
+    }
+    return raw.map(x => ethers.BigNumber.from(x));
+  }
+
   // ====== DexScreener USD ======
   async function fetchDexPriceUSD(tokenAddress) {
-    // DexScreener token endpoint
-    // Note: Some browsers may block CORS in rare cases. If that happens, we fail gracefully.
     try {
       const url = `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`;
-      const res = await fetch(url, { method: "GET" });
+      const res = await fetch(url);
       if (!res.ok) return null;
       const data = await res.json();
       const pairs = Array.isArray(data.pairs) ? data.pairs : [];
-      // Prefer the selected chain
+
       const chainName =
         currentNetKey === "bsc" ? "bsc" :
         currentNetKey === "eth" ? "ethereum" :
@@ -275,22 +307,11 @@
     setTopPills();
     setGasHint();
 
-    if (!account) {
-      walletBalEl.textContent = "—";
-      tokSymEl.textContent = "—";
-      tokDecEl.textContent = "—";
-      tokBalEl.textContent = "—";
-      allowEl.textContent = "—";
-      usdEstEl.textContent = "—";
-      postFeeAmtEl.textContent = "—";
-      return;
-    }
+    if (!account) return;
 
-    // Wallet native balance
     const bal = await provider.getBalance(account);
     walletBalEl.textContent = `${ethers.utils.formatEther(bal)} ${nativeSymbol()}`;
 
-    // Token path
     if (tokenIsNative()) {
       token = null;
       tokenMeta = { symbol: nativeSymbol(), decimals: 18 };
@@ -298,21 +319,13 @@
       tokDecEl.textContent = "18";
       tokBalEl.textContent = `${ethers.utils.formatEther(bal)} ${nativeSymbol()}`;
       allowEl.textContent = "— (native)";
-      usdEstEl.textContent = "—";
+      tokenPriceUSD = null;
       updateEstimates();
       return;
     }
 
     const tAddr = tokenAddr.value.trim();
-    if (!isAddr(tAddr)) {
-      tokSymEl.textContent = "—";
-      tokDecEl.textContent = "—";
-      tokBalEl.textContent = "—";
-      allowEl.textContent = "—";
-      usdEstEl.textContent = "—";
-      updateEstimates();
-      return;
-    }
+    if (!isAddr(tAddr)) return;
 
     token = new ethers.Contract(tAddr, ERC20_ABI, signer);
 
@@ -330,40 +343,27 @@
       tokBalEl.textContent = `${ethers.utils.formatUnits(tbal, dec)} ${sym}`;
       allowEl.textContent = `${ethers.utils.formatUnits(alw, dec)} ${sym}`;
 
-      // USD price
       tokenPriceUSD = await fetchDexPriceUSD(tAddr);
       updateEstimates();
-      log(`Token loaded: ${sym} (decimals ${dec})${tokenPriceUSD ? ` • $${tokenPriceUSD}` : ""}`);
+      log(`Token loaded: ${sym} (decimals ${dec}) ${tokenPriceUSD ? `• $${tokenPriceUSD}` : ""}`);
     } catch (e) {
-      log(`Token read failed: ${shortErr(e)}`);
-      tokSymEl.textContent = "—";
-      tokDecEl.textContent = "—";
-      tokBalEl.textContent = "—";
-      allowEl.textContent = "—";
-      tokenPriceUSD = null;
+      log(`Token read failed: ${prettyRpcError(e)}`);
     }
   }
 
   function updateEstimates() {
     const amt = toFloatSafe(amountIn.value);
-    const post = amt * (1 - PLATFORM_FEE_PCT / 100);
-    postFeeAmtEl.textContent = amt > 0 ? `${post} ${tokenMeta.symbol}` : "—";
-
-    if (tokenPriceUSD && amt > 0) {
-      usdEstEl.textContent = `$${(amt * tokenPriceUSD).toFixed(2)}`;
-    } else {
+    if (!(amt > 0)) {
       usdEstEl.textContent = "—";
+      postFeeAmtEl.textContent = "—";
+      return;
     }
-  }
 
-  function shortErr(e) {
-    const msg =
-      e?.data?.message ||
-      e?.error?.message ||
-      e?.reason ||
-      e?.message ||
-      String(e);
-    return msg.length > 160 ? msg.slice(0, 160) + "…" : msg;
+    // We DO NOT subtract fee here (contract handles it)
+    postFeeAmtEl.textContent = `${amt} ${tokenMeta.symbol}`;
+
+    if (tokenPriceUSD) usdEstEl.textContent = `$${(amt * tokenPriceUSD).toFixed(2)}`;
+    else usdEstEl.textContent = "—";
   }
 
   // ====== MetaMask connect / switch ======
@@ -390,23 +390,17 @@
       log(`Connected: ${account} on chainId ${activeChainId}`);
       playPing();
 
+      if (activeChainId === 56) currentNetKey = "bsc";
+      else if (activeChainId === 1) currentNetKey = "eth";
+      else if (activeChainId === 137) currentNetKey = "polygon";
+
+      networkSel.value = currentNetKey;
       setTopPills();
-      await autoSyncNetworkSelection();
+      setGasHint();
       await refreshTokenAndWallet();
     } catch (e) {
-      showError(`Connect failed: ${shortErr(e)}`);
+      showError(`Connect failed: ${prettyRpcError(e)}`);
     }
-  }
-
-  async function autoSyncNetworkSelection() {
-    // Choose dropdown based on actual connected chain
-    const id = activeChainId;
-    if (id === 56) currentNetKey = "bsc";
-    else if (id === 1) currentNetKey = "eth";
-    else if (id === 137) currentNetKey = "polygon";
-    setTopPills();
-    networkSel.value = currentNetKey;
-    setGasHint();
   }
 
   async function switchNetwork() {
@@ -420,72 +414,29 @@
         params: [{ chainId: target.hex }]
       });
       log(`Switched to ${target.name}`);
-      // provider network will update via chainChanged listener
+      // reload for a clean provider state
+      window.location.reload();
     } catch (e) {
-      showError(`Switch failed: ${shortErr(e)}`);
+      showError(`Switch failed: ${prettyRpcError(e)}`);
     }
   }
 
-  // ====== Percent math (simple % -> contract shares) ======
-  function buildSharesSimple(scale) {
-    // User enters simple percentages that must total 100
-    const pcts = recipients.map(r => Number(r.pct) || 0);
-    const total = pcts.reduce((a, b) => a + b, 0);
-    if (Math.abs(total - 100) > 0.0001) throw new Error("Total percent must equal 100.");
+  // ====== MAX for native (reserve gas) ======
+  async function setMax() {
+    clearError();
+    try {
+      if (!account) throw new Error("Connect wallet first.");
+      if (!tokenIsNative()) throw new Error("MAX is for native coin only (leave token address blank).");
 
-    // Convert to integer shares with rounding, then fix remainder to exact sum=scale
-    const raw = pcts.map(p => Math.floor((p / 100) * scale));
-    let sum = raw.reduce((a, b) => a + b, 0);
-
-    // distribute remaining shares to highest pct rows
-    let rem = scale - sum;
-    const order = pcts.map((p, i) => ({ p, i })).sort((a, b) => b.p - a.p);
-    let k = 0;
-    while (rem > 0) {
-      raw[order[k % order.length].i] += 1;
-      rem--;
-      k++;
+      const bal = await provider.getBalance(account);
+      const reserve = ethers.utils.parseEther(CHAIN[currentNetKey].gasReserve);
+      const max = bal.gt(reserve) ? bal.sub(reserve) : ethers.BigNumber.from(0);
+      amountIn.value = ethers.utils.formatEther(max);
+      updateEstimates();
+      log(`MAX set (reserved ${CHAIN[currentNetKey].gasReserve} ${nativeSymbol()} for gas)`);
+    } catch (e) {
+      showError(`MAX failed: ${prettyRpcError(e)}`);
     }
-    // If we overshot somehow (rare), remove from smallest
-    while (raw.reduce((a, b) => a + b, 0) > scale) {
-      const smallest = pcts.map((p, i) => ({ p, i })).sort((a, b) => a.p - b.p)[0].i;
-      if (raw[smallest] > 0) raw[smallest] -= 1;
-      else break;
-    }
-    return raw;
-  }
-
-  function buildSharesFeeAdjusted(scale) {
-    // Adjust total shares to (1 - fee)
-    const targetSum = Math.round(scale * (1 - PLATFORM_FEE_PCT / 100));
-
-    const pcts = recipients.map(r => Number(r.pct) || 0);
-    const total = pcts.reduce((a, b) => a + b, 0);
-    if (Math.abs(total - 100) > 0.0001) throw new Error("Total percent must equal 100.");
-
-    const raw = pcts.map(p => Math.floor((p / 100) * targetSum));
-    let sum = raw.reduce((a, b) => a + b, 0);
-
-    let rem = targetSum - sum;
-    const order = pcts.map((p, i) => ({ p, i })).sort((a, b) => b.p - a.p);
-    let k = 0;
-    while (rem > 0) {
-      raw[order[k % order.length].i] += 1;
-      rem--;
-      k++;
-    }
-    while (raw.reduce((a, b) => a + b, 0) > targetSum) {
-      const smallest = pcts.map((p, i) => ({ p, i })).sort((a, b) => a.p - b.p)[0].i;
-      if (raw[smallest] > 0) raw[smallest] -= 1;
-      else break;
-    }
-    return raw;
-  }
-
-  function validateRecipients() {
-    if (recipients.length < 1) throw new Error("Add at least 1 recipient.");
-    const bad = recipients.find(r => !isAddr(r.addr));
-    if (bad) throw new Error("One or more recipient addresses are invalid.");
   }
 
   // ====== Approve ======
@@ -499,8 +450,7 @@
       const amt = toFloatSafe(amountIn.value);
       if (!(amt > 0)) throw new Error("Enter an amount > 0.");
 
-      const dec = tokenMeta.decimals;
-      const parsed = ethers.utils.parseUnits(String(amt), dec);
+      const parsed = ethers.utils.parseUnits(String(amt), tokenMeta.decimals);
 
       log(`Approving ${tokenMeta.symbol} for splitter ${SPLITTERS[currentNetKey]}…`);
       const tx = await token.approve(SPLITTERS[currentNetKey], parsed);
@@ -509,17 +459,16 @@
       log(`Approve confirmed ✅`);
       await refreshTokenAndWallet();
     } catch (e) {
-      showError(`Approve failed: ${shortErr(e)}`);
-      log(`Approve failed: ${shortErr(e)}`);
+      showError(`Approve failed: ${prettyRpcError(e)}`);
+      log(`Approve failed: ${prettyRpcError(e)}`);
     }
   }
 
-  // ====== Split (with smart preflight) ======
+  // ====== Split (basis points only) ======
   async function split() {
     clearError();
     try {
       if (!account) throw new Error("Connect wallet first.");
-
       validateRecipients();
 
       const amt = toFloatSafe(amountIn.value);
@@ -527,59 +476,41 @@
 
       const splitter = currentSplitter();
       const recAddrs = recipients.map(r => r.addr);
+      const bps = buildBasisPointsArray(); // sum == 10000 always
 
-      // Build amount
-      let callAmountBN;
-      if (tokenIsNative()) {
-        callAmountBN = ethers.utils.parseEther(String(amt));
-      } else {
+      // amount
+      let amountBN;
+      if (tokenIsNative()) amountBN = ethers.utils.parseEther(String(amt));
+      else {
         if (!token) throw new Error("Enter a valid token address first.");
-        callAmountBN = ethers.utils.parseUnits(String(amt), tokenMeta.decimals);
+        amountBN = ethers.utils.parseUnits(String(amt), tokenMeta.decimals);
       }
 
-      // Try combinations:
-      // 1) simple shares (sum=scale)
-      // 2) fee-adjusted shares (sum=scale*(1-fee))
-      // For each, try scale candidates (100, 10000, 100000)
-      const tokenToUse = tokenIsNative() ? ethers.constants.AddressZero : token.address;
-
-      let chosen = null;
-
-      for (const scale of SCALE_CANDIDATES) {
-        // simple
-        try {
-          const shares = buildSharesSimple(scale).map(x => bn(x));
-          await preflight(splitter, tokenToUse, callAmountBN, recAddrs, shares);
-          chosen = { scale, mode: "simple", shares };
-          break;
-        } catch {}
-        // fee adjusted
-        try {
-          const shares = buildSharesFeeAdjusted(scale).map(x => bn(x));
-          await preflight(splitter, tokenToUse, callAmountBN, recAddrs, shares);
-          chosen = { scale, mode: "feeAdjusted", shares };
-          break;
-        } catch {}
+      // preflight (this gives you REAL revert reasons if it fails)
+      log(`Preflight callStatic… (bps sum=${bps.reduce((a,b)=>a.add(b),ethers.BigNumber.from(0)).toString()})`);
+      if (tokenIsNative()) {
+        await splitter.callStatic.splitNative(recAddrs, bps, { value: amountBN });
+      } else {
+        await splitter.callStatic.splitToken(token.address, amountBN, recAddrs, bps);
       }
+      log(`Preflight OK ✅`);
 
-      if (!chosen) {
-        throw new Error("Splitter rejected the percent format. Your contract is enforcing a different rule than 100/10000/100000 or fee-adjust. (We can add more scales if needed.)");
-      }
-
-      log(`Preflight OK ✅ (scale=${chosen.scale}, mode=${chosen.mode === "feeAdjusted" ? "auto-adjusted for 1% fee" : "simple"})`);
-
-      // Execute
       playCoins(recipients.length);
 
+      // execute with a gas buffer
       if (tokenIsNative()) {
-        log(`Executing native split on ${CHAIN[currentNetKey].name}…`);
-        const tx = await splitter.splitNative(recAddrs, chosen.shares, { value: callAmountBN });
+        const est = await splitter.estimateGas.splitNative(recAddrs, bps, { value: amountBN });
+        const gasLimit = est.mul(120).div(100);
+        log(`Executing native split… gasLimit=${gasLimit.toString()}`);
+        const tx = await splitter.splitNative(recAddrs, bps, { value: amountBN, gasLimit });
         log(`Split tx: ${tx.hash}`);
         await tx.wait();
         log(`Split complete ✅`);
       } else {
-        log(`Executing token split on ${CHAIN[currentNetKey].name}…`);
-        const tx = await splitter.splitToken(tokenToUse, callAmountBN, recAddrs, chosen.shares);
+        const est = await splitter.estimateGas.splitToken(token.address, amountBN, recAddrs, bps);
+        const gasLimit = est.mul(120).div(100);
+        log(`Executing token split… gasLimit=${gasLimit.toString()}`);
+        const tx = await splitter.splitToken(token.address, amountBN, recAddrs, bps, { gasLimit });
         log(`Split tx: ${tx.hash}`);
         await tx.wait();
         log(`Split complete ✅`);
@@ -587,39 +518,13 @@
 
       await refreshTokenAndWallet();
     } catch (e) {
-      showError(`Split failed: ${shortErr(e)}`);
-      log(`Split failed: ${shortErr(e)}`);
+      const msg = prettyRpcError(e);
+      showError(`Split failed: ${msg}`);
+      log(`Split failed: ${msg}`);
     }
   }
 
-  async function preflight(splitter, tokenToUse, amountBN, recAddrs, sharesBN) {
-    // callStatic to catch reverts BEFORE sending a tx
-    if (tokenIsNative()) {
-      await splitter.callStatic.splitNative(recAddrs, sharesBN, { value: amountBN });
-    } else {
-      await splitter.callStatic.splitToken(tokenToUse, amountBN, recAddrs, sharesBN);
-    }
-  }
-
-  // ====== MAX for native (reserves gas) ======
-  async function setMax() {
-    clearError();
-    try {
-      if (!account) throw new Error("Connect wallet first.");
-      if (!tokenIsNative()) throw new Error("MAX is for native coin only (leave token address blank).");
-
-      const bal = await provider.getBalance(account);
-      const reserve = ethers.utils.parseEther(CHAIN[currentNetKey].gasReserve);
-      const max = bal.gt(reserve) ? bal.sub(reserve) : bn(0);
-      amountIn.value = ethers.utils.formatEther(max);
-      updateEstimates();
-      log(`MAX set (reserved ${CHAIN[currentNetKey].gasReserve} ${nativeSymbol()} for gas)`);
-    } catch (e) {
-      showError(`MAX failed: ${shortErr(e)}`);
-    }
-  }
-
-  // ====== Events / wiring ======
+  // ====== Wiring ======
   function wire() {
     renderRecipients();
     updateTotal();
@@ -659,14 +564,12 @@
     clearLogBtn.onclick = () => { logEl.textContent = ""; };
     liveBtn.onclick = refreshTokenAndWallet;
 
-    // MetaMask listeners
     if (window.ethereum) {
       window.ethereum.on("accountsChanged", () => window.location.reload());
       window.ethereum.on("chainChanged", () => window.location.reload());
     }
   }
 
-  // ====== Boot ======
   wire();
-  log("ZEPHENHEL CITADEL ready. Connect wallet to begin.");
+  log("ZEPHENHEL CITADEL ready. Basis-points mode (10000) enabled.");
 })();
