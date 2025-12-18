@@ -3,140 +3,114 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ZEPHENHEL CITADEL</title>
+  <title>ZEPHENHEL CITADEL — Tri-Chain Splitter</title>
+  <link rel="stylesheet" href="styles.css" />
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
-
-  <link rel="stylesheet" href="./styles.css" />
+  <!-- Ethers v5 (works well with window.ethereum / MetaMask) -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 </head>
 
 <body>
-  <div class="bg"></div>
+  <div class="bg-orb orb1"></div>
+  <div class="bg-orb orb2"></div>
 
-  <header class="top">
+  <header class="topbar">
     <div class="brand">
-      <div class="mark">✠</div>
-      <div class="brandtext">
-        <div class="title">ZEPHENHEL <span class="gold">CITADEL</span></div>
-        <div class="sub">Mythic Black • Gold • Distribution Command</div>
-      </div>
+      <div class="brand-title">ZEPHENHEL CITADEL</div>
+      <div class="brand-sub">Tri-Chain Distribution Console • Mythic Black + Gold</div>
     </div>
 
-    <div class="right">
-      <div class="chip" id="mmChip">MetaMask: <b>—</b></div>
-      <div class="chip" id="netChip">Chain: <b>—</b></div>
-      <div class="chip" id="acctChip">Wallet: <b>DISCONNECTED</b></div>
+    <div class="statusbar">
+      <div class="pill">
+        <span class="label">NETWORK</span>
+        <select id="networkSelect" class="select">
+          <option value="BSC">BSC</option>
+          <option value="ETH">Ethereum</option>
+          <option value="POLY">Polygon</option>
+        </select>
+      </div>
 
-      <button class="btn gold" id="connectBtn">CONNECT</button>
-      <button class="btn" id="switchBtn" title="Switch to BSC">SWITCH TO BSC</button>
+      <div class="pill">
+        <span class="label">WALLET</span>
+        <span id="walletStatus" class="value">Disconnected</span>
+      </div>
+
+      <button id="connectBtn" class="btn btn-primary">CONNECT</button>
     </div>
   </header>
 
-  <main class="wrap grid">
-    <section class="console">
-      <div class="panelTitle">CONTROL CORE</div>
-
-      <div class="row">
-        <div class="field">
-          <label>SPLITTER (BSC)</label>
-          <input id="splitter" placeholder="0x..." spellcheck="false" />
-        </div>
+  <main class="layout">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Splitter Command</h2>
+        <div class="tiny">Platform fee: <span class="fee">1%</span> (applies on execution)</div>
       </div>
 
-      <div class="row two">
+      <div class="grid2">
         <div class="field">
-          <label>TOKEN ADDRESS</label>
-          <input id="token" placeholder="0x..." spellcheck="false" />
-          <div class="micro" id="tokenMeta">Token: — • Decimals: — • Price: —</div>
-          <div class="micro">
-            Balance: <span class="gold" id="bal">—</span>
-            Allowance: <span class="gold" id="alw">—</span>
+          <label>Splitter Contract (auto)</label>
+          <input id="splitterAddress" class="input mono" type="text" readonly />
+        </div>
+
+        <div class="field">
+          <label>Token Contract (ERC20 / BEP20)</label>
+          <input id="tokenAddress" class="input mono" type="text" placeholder="0x..." />
+        </div>
+
+        <div class="field">
+          <label>Amount (token units)</label>
+          <input id="tokenAmount" class="input" type="number" step="any" placeholder="0.0" />
+          <div class="hint" id="tokenMeta">Token — Decimals — Price —</div>
+        </div>
+
+        <div class="field">
+          <label>USD Estimate</label>
+          <div class="estimate">
+            <div class="est-main" id="usdEstimate">$0.00</div>
+            <div class="est-sub" id="usdHint">Enter token + amount</div>
           </div>
         </div>
+      </div>
 
-        <div class="field">
-          <label>AMOUNT</label>
-          <input id="amount" placeholder="0.0" inputmode="decimal" />
-          <div class="micro">
-            ≈ <span class="gold" id="usd">$—</span>
-            <span class="tiny">platform fee: 1%</span>
-          </div>
+      <div class="divider"></div>
+
+      <div class="recipients-head">
+        <h3>Recipients</h3>
+        <div class="totals">
+          <span>Total:</span>
+          <span id="totalPct" class="total">0%</span>
+          <button id="addRecipientBtn" class="btn btn-ghost">+ ADD</button>
         </div>
       </div>
 
-      <div class="row head">
-        <div class="h">RECIPIENTS</div>
-        <div class="h2">
-          Total: <b id="total">0%</b>
-          <button class="btn mini" id="addBtn">+ ADD</button>
-        </div>
+      <div id="recipients" class="recipients"></div>
+
+      <div class="actions">
+        <button id="approveBtn" class="btn btn-secondary">APPROVE</button>
+        <button id="splitBtn" class="btn btn-primary">EXECUTE SPLIT</button>
       </div>
 
-      <div id="list" class="list"></div>
-
-      <div class="row actions">
-        <button class="btn" id="approveBtn">APPROVE</button>
-        <button class="btn gold" id="splitBtn">EXECUTE SPLIT</button>
-      </div>
-
-      <div id="warn" class="warn" hidden></div>
-
-      <div class="receipt" id="receipt" hidden>
-        <div class="receiptHead">
-          <div class="h">RECEIPT</div>
-          <a id="txLink" class="btn mini" href="#" target="_blank" rel="noreferrer" style="display:none;">VIEW TX</a>
-        </div>
-        <pre id="receiptText"></pre>
-        <button class="btn mini" id="copyBtn">COPY RECEIPT</button>
+      <div class="footnote">
+        If Connect doesn’t pop MetaMask: make sure MetaMask is enabled for this site and refresh.
       </div>
     </section>
 
-    <aside class="side">
-      <div class="console sidePanel">
-        <div class="panelTitle">RUNTIME LOG</div>
-        <div class="log" id="log"></div>
-        <button class="btn mini" id="clearLog">CLEAR</button>
-
-        <div class="divider"></div>
-
-        <div class="panelTitle">QUICK CHECKS</div>
-        <div class="micro">
-          • If MetaMask shows “NO”, your extension isn’t injecting on this page.<br/>
-          • If Chain isn’t BSC, hit “SWITCH TO BSC”.<br/>
-          • If Token price is “—”, DexScreener has no price for that token.
-        </div>
+    <aside class="panel logpanel">
+      <div class="panel-head">
+        <h2>Runtime Log</h2>
+        <div class="tiny">Live diagnostics (copy if anything fails)</div>
+      </div>
+      <div id="log" class="log"></div>
+      <div class="log-actions">
+        <button id="clearLogBtn" class="btn btn-ghost">Clear</button>
       </div>
     </aside>
   </main>
 
-  <!-- Ethers (primary + fallback) -->
-  <script>
-    window.__loadEthers = function(src, next){
-      return new Promise((resolve, reject) => {
-        const s = document.createElement("script");
-        s.src = src; s.defer = true;
-        s.onload = () => resolve(true);
-        s.onerror = () => reject(new Error("Failed: " + src));
-        document.head.appendChild(s);
-      });
-    }
-  </script>
-  <script>
-    (async () => {
-      try {
-        await window.__loadEthers("https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js");
-      } catch(e1) {
-        try {
-          await window.__loadEthers("https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js");
-        } catch(e2) {
-          console.error(e1, e2);
-        }
-      }
-    })();
-  </script>
+  <footer class="footer">
+    Zephenhel © Tactical Financial Infrastructure
+  </footer>
 
-  <script defer src="./app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
