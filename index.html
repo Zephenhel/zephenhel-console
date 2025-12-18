@@ -9,7 +9,764 @@
     body {
       margin: 0;
       background: radial-gradient(circle at top, #111 0%, #000 70%);
-      color: #d4af37;
+  <!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Zephenhel Console</title>
+
+  <!-- Ethers v5 (matches your log: providers/5.7.2) -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+
+  <style>
+    :root{
+      --bg0:#070707;
+      --bg1:#0c0c0c;
+      --panel:#121212;
+      --panel2:#151515;
+      --stroke:#2a2a2a;
+
+      --gold:#d6b24a;
+      --gold2:#f0d37a;
+      --goldGlow: rgba(214,178,74,.35);
+
+      --green:#7da66a; /* military green */
+      --green2:#a7d08f;
+      --greenGlow: rgba(125,166,106,.25);
+
+      --text:#e9e9e9;
+      --muted:#b9b9b9;
+      --danger:#ff6b6b;
+      --ok:#67e480;
+    }
+
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background:
+        radial-gradient(1200px 600px at 50% -10%, rgba(214,178,74,.08), transparent 60%),
+        radial-gradient(900px 500px at 20% 20%, rgba(125,166,106,.08), transparent 60%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+      color:var(--text);
+      letter-spacing:.2px;
+    }
+
+    .wrap{
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 28px 16px 48px;
+    }
+
+    .topbar{
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap:16px;
+      padding: 10px 12px 18px;
+      border-bottom: 1px solid rgba(214,178,74,.18);
+      position: relative;
+    }
+
+    .brand h1{
+      margin:0;
+      font-size: 34px;
+      letter-spacing: 2px;
+      color: var(--gold2);
+      text-shadow: 0 0 12px rgba(214,178,74,.18);
+    }
+    .brand .sub{
+      margin-top:6px;
+      font-size: 13px;
+      color: var(--muted);
+      opacity: .9;
+    }
+
+    .statusRow{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      background: rgba(0,0,0,.45);
+      border: 1px solid rgba(214,178,74,.25);
+      box-shadow: 0 0 0 1px rgba(0,0,0,.25) inset;
+      font-size: 13px;
+      color: var(--text);
+      white-space: nowrap;
+    }
+
+    .dot{
+      width:10px;height:10px;border-radius:50%;
+      background: #666;
+      box-shadow: 0 0 0 0 rgba(103,228,128,0);
+    }
+    .dot.ok{ background: var(--ok); box-shadow: 0 0 12px rgba(103,228,128,.25); }
+    .dot.bad{ background: var(--danger); box-shadow: 0 0 12px rgba(255,107,107,.18); }
+
+    /* Radar ping */
+    .radar{
+      position: relative;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 1px solid rgba(214,178,74,.45);
+      box-shadow: 0 0 14px rgba(214,178,74,.18);
+      overflow: visible;
+    }
+    .radar::before{
+      content:"";
+      position:absolute;
+      inset:4px;
+      border-radius:50%;
+      background: rgba(214,178,74,.22);
+    }
+    .radar::after{
+      content:"";
+      position:absolute;
+      inset:-2px;
+      border-radius:50%;
+      border: 1px solid rgba(214,178,74,.55);
+      opacity:.0;
+      transform: scale(.6);
+      animation: ping 1.7s infinite;
+    }
+    .radar.active::after{
+      opacity:1;
+    }
+    @keyframes ping{
+      0%{ transform: scale(.65); opacity:.75; }
+      70%{ transform: scale(1.6); opacity:.12; }
+      100%{ transform: scale(1.9); opacity:0; }
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1.25fr .9fr;
+      gap: 16px;
+      margin-top: 18px;
+    }
+    @media (max-width: 920px){
+      .grid{ grid-template-columns:1fr; }
+    }
+
+    .panel{
+      background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(0,0,0,.18));
+      border: 1px solid rgba(214,178,74,.20);
+      border-radius: 18px;
+      box-shadow:
+        0 0 0 1px rgba(0,0,0,.35) inset,
+        0 12px 30px rgba(0,0,0,.35);
+      overflow:hidden;
+    }
+    .panelHeader{
+      padding: 14px 16px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      border-bottom: 1px solid rgba(214,178,74,.15);
+      background: rgba(0,0,0,.25);
+    }
+    .panelHeader .title{
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: var(--gold2);
+      font-size: 14px;
+      text-transform: uppercase;
+    }
+    .panelBody{ padding: 16px; }
+
+    .tabs{
+      display:flex;
+      gap:10px;
+    }
+    .tabBtn{
+      appearance:none;
+      cursor:pointer;
+      border: 1px solid rgba(214,178,74,.22);
+      background: rgba(0,0,0,.35);
+      color: var(--gold2);
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-weight: 800;
+      letter-spacing:.8px;
+      text-transform: uppercase;
+      font-size: 12px;
+    }
+    .tabBtn.active{
+      background: rgba(214,178,74,.12);
+      box-shadow: 0 0 0 1px rgba(214,178,74,.22) inset, 0 0 18px rgba(214,178,74,.12);
+    }
+
+    .row{ display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 520px){ .row{ grid-template-columns:1fr; } }
+
+    .field{ display:flex; flex-direction:column; gap: 6px; }
+    .label{
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: .8px;
+      text-transform: uppercase;
+    }
+
+    input, textarea, select{
+      width:100%;
+      border-radius: 14px;
+      border: 1px solid rgba(125,166,106,.38);
+      background: rgba(10,10,10,.65);
+      color: var(--text);
+      padding: 12px 12px;
+      outline: none;
+      box-shadow: 0 0 0 1px rgba(0,0,0,.35) inset, 0 0 18px rgba(125,166,106,.08);
+      font-size: 14px;
+    }
+    input:focus, textarea:focus, select:focus{
+      border-color: rgba(214,178,74,.55);
+      box-shadow: 0 0 0 1px rgba(214,178,74,.25) inset, 0 0 24px rgba(214,178,74,.14);
+    }
+    textarea{ min-height: 90px; resize: vertical; }
+
+    .btnRow{ display:flex; gap: 10px; flex-wrap:wrap; margin-top: 12px; }
+
+    .btn{
+      appearance:none;
+      cursor:pointer;
+      border-radius: 14px;
+      padding: 12px 14px;
+      border: 1px solid rgba(214,178,74,.30);
+      background: rgba(214,178,74,.10);
+      color: var(--gold2);
+      font-weight: 900;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      font-size: 12px;
+      box-shadow: 0 0 0 1px rgba(0,0,0,.35) inset, 0 0 20px rgba(214,178,74,.10);
+    }
+    .btn:hover{ filter: brightness(1.07); }
+    .btn:disabled{ opacity:.55; cursor:not-allowed; }
+
+    .btn.secondary{
+      border-color: rgba(125,166,106,.40);
+      background: rgba(125,166,106,.10);
+      color: var(--green2);
+      box-shadow: 0 0 0 1px rgba(0,0,0,.35) inset, 0 0 20px rgba(125,166,106,.10);
+    }
+
+    .hint{
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    .logBox{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12.5px;
+      line-height: 1.35;
+      white-space: pre-wrap;
+      background: rgba(0,0,0,.35);
+      border: 1px solid rgba(214,178,74,.14);
+      border-radius: 16px;
+      padding: 12px;
+      min-height: 220px;
+      box-shadow: 0 0 0 1px rgba(0,0,0,.35) inset;
+      overflow:auto;
+    }
+
+    .footer{
+      margin-top: 16px;
+      text-align:center;
+      color: rgba(214,178,74,.7);
+      font-size: 12px;
+      opacity:.9;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+
+    <div class="topbar">
+      <div class="brand">
+        <h1>ZEPHENHEL CONSOLE</h1>
+        <div class="sub">Splitter • Inheritance • Tactical Control</div>
+      </div>
+
+      <div class="statusRow">
+        <div class="pill" title="Radar Ping">
+          <span class="radar" id="radar"></span>
+          <span id="radarText">Passive Scan</span>
+        </div>
+
+        <div class="pill" title="Network">
+          <span class="dot" id="netDot"></span>
+          <span id="netText">Network: —</span>
+        </div>
+
+        <div class="pill" title="Wallet">
+          <span class="dot" id="walletDot"></span>
+          <span id="walletText">Wallet: Disconnected</span>
+        </div>
+
+        <button class="btn" id="btnConnect">Connect Wallet</button>
+        <button class="btn secondary" id="btnSwitch">Switch Network</button>
+      </div>
+    </div>
+
+    <div class="grid">
+
+      <!-- LEFT: MODULE -->
+      <div class="panel">
+        <div class="panelHeader">
+          <div class="tabs">
+            <button class="tabBtn active" id="tabSplitter">Splitter</button>
+            <button class="tabBtn" id="tabVault">Vault</button>
+          </div>
+          <div class="title" id="moduleTitle">Splitter Module</div>
+        </div>
+
+        <div class="panelBody">
+
+          <!-- SPLITTER -->
+          <div id="viewSplitter">
+            <div class="row">
+              <div class="field">
+                <div class="label">Splitter Contract (current network)</div>
+                <input id="splitterAddr" placeholder="0x… (auto or paste here)" />
+              </div>
+              <div class="field">
+                <div class="label">Token Address (ERC20 / BEP20)</div>
+                <input id="tokenAddr" placeholder="0x… token contract" />
+              </div>
+            </div>
+
+            <div class="row" style="margin-top:12px;">
+              <div class="field">
+                <div class="label">Recipients (one per line)</div>
+                <textarea id="recipients" placeholder="0xabc...\n0xdef...\n0x123..."></textarea>
+              </div>
+              <div class="field">
+                <div class="label">Shares (one per line) — integers only</div>
+                <textarea id="shares" placeholder="50\n30\n20"></textarea>
+              </div>
+            </div>
+
+            <div class="row" style="margin-top:12px;">
+              <div class="field">
+                <div class="label">Amount (token units)</div>
+                <input id="amount" placeholder="0.30" />
+              </div>
+              <div class="field">
+                <div class="label">Fee (display only)</div>
+                <input id="feeDisplay" value="1.00%" readonly />
+              </div>
+            </div>
+
+            <div class="btnRow">
+              <button class="btn secondary" id="btnApprove">Approve Token</button>
+              <button class="btn" id="btnExecute">Execute Split</button>
+            </div>
+
+            <div class="hint">
+              If “Connect Wallet” does nothing, open DevTools Console and run: <b>window.ethereum</b>.
+              If it returns <b>undefined</b>, MetaMask isn’t injected in this browser/profile.
+            </div>
+          </div>
+
+          <!-- VAULT (placeholder: separate build later) -->
+          <div id="viewVault" style="display:none;">
+            <div class="hint">
+              Vault is a <b>separate module</b> (as planned). This tab stays here, but the vault contract UI will be added next.
+            </div>
+            <div style="margin-top:12px;" class="logBox">
+[STANDBY] Vault module not loaded yet.
+Next: vault contract address + ABI + actions (create vault, ping, claim, etc).
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- RIGHT: TACTICAL LOG -->
+      <div class="panel">
+        <div class="panelHeader">
+          <div class="title">Tactical Log</div>
+          <div class="pill" style="border-color:rgba(125,166,106,.25)">
+            Errors, tx hashes, and status
+          </div>
+        </div>
+        <div class="panelBody">
+          <div class="logBox" id="log"></div>
+          <div class="hint">If something hangs: check MetaMask popup + correct network.</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="footer">Zephenhel © Tactical Financial Infrastructure</div>
+  </div>
+
+<script>
+(() => {
+  // ========= CONFIG (PUT YOUR REAL ADDRESSES/ABI HERE) =========
+
+  // Networks we support in UI
+  const NETWORKS = {
+    bsc: {
+      name: "BSC",
+      chainIdDec: 56,
+      chainIdHex: "0x38",
+      // optional for add chain (MetaMask usually already has BSC)
+      addParams: {
+        chainId: "0x38",
+        chainName: "BNB Smart Chain",
+        nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
+        rpcUrls: ["https://bsc-dataseed.binance.org/"],
+        blockExplorerUrls: ["https://bscscan.com/"]
+      }
+    },
+    eth: {
+      name: "Ethereum",
+      chainIdDec: 1,
+      chainIdHex: "0x1",
+      addParams: null
+    },
+    polygon: {
+      name: "Polygon",
+      chainIdDec: 137,
+      chainIdHex: "0x89",
+      addParams: {
+        chainId: "0x89",
+        chainName: "Polygon",
+        nativeCurrency: { name: "MATIC", symbol: "MATIC", decimals: 18 },
+        rpcUrls: ["https://polygon-rpc.com/"],
+        blockExplorerUrls: ["https://polygonscan.com/"]
+      }
+    }
+  };
+
+  // Map chainId -> your deployed splitter contract address (fill these in)
+  const SPLITTER_BY_CHAIN = {
+    56: "0x0000000000000000000000000000000000000000", // TODO: your BSC splitter
+    1: "0x0000000000000000000000000000000000000000", // TODO
+    137: "0x0000000000000000000000000000000000000000" // TODO
+  };
+
+  // Minimal ERC20 ABI for decimals/approve
+  const ERC20_ABI = [
+    "function decimals() view returns (uint8)",
+    "function symbol() view returns (string)",
+    "function approve(address spender, uint256 amount) returns (bool)"
+  ];
+
+  // TODO: Replace this with your actual Splitter ABI
+  // This assumes your log behavior: approve -> depositAndDistribute(...)
+  const SPLITTER_ABI = [
+    // If your function name differs, tell me the real signature and I’ll swap it.
+    "function depositAndDistribute(address token, address[] recipients, uint256[] shares, uint256 amount) external"
+  ];
+
+  // ========= UI HELPERS =========
+  const $ = (id) => document.getElementById(id);
+  const logEl = $("log");
+  function ts(){
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2,"0");
+    const mm = String(d.getMinutes()).padStart(2,"0");
+    const ss = String(d.getSeconds()).padStart(2,"0");
+    return `[${hh}:${mm}:${ss}]`;
+  }
+  function log(line){
+    logEl.textContent = `${ts()} ${line}\n` + logEl.textContent;
+  }
+  function shortAddr(a){
+    if(!a || a.length < 10) return a || "";
+    return a.slice(0,6)+"…"+a.slice(-4);
+  }
+
+  // ========= STATE =========
+  let provider = null;
+  let signer = null;
+  let wallet = null;
+  let chainId = null;
+
+  // ========= RADAR =========
+  const radar = $("radar");
+  const radarText = $("radarText");
+  function setRadar(active, text){
+    radar.classList.toggle("active", !!active);
+    radarText.textContent = text || (active ? "Active Scan" : "Passive Scan");
+  }
+
+  // ========= STATUS =========
+  const walletDot = $("walletDot");
+  const walletText = $("walletText");
+  const netDot = $("netDot");
+  const netText = $("netText");
+
+  function setWalletStatus(connected, addr){
+    walletDot.classList.toggle("ok", !!connected);
+    walletDot.classList.toggle("bad", !connected);
+    walletText.textContent = connected ? `Wallet: ${shortAddr(addr)}` : "Wallet: Disconnected";
+    setRadar(connected, connected ? "Active Scan" : "Passive Scan");
+  }
+
+  function setNetworkStatus(cid){
+    chainId = cid;
+    const name =
+      cid === 56 ? "BSC (56)" :
+      cid === 1 ? "ETH (1)" :
+      cid === 137 ? "POLY (137)" : `Unknown (${cid})`;
+    netDot.classList.toggle("ok", [56,1,137].includes(cid));
+    netDot.classList.toggle("bad", ![56,1,137].includes(cid));
+    netText.textContent = `Network: ${name}`;
+
+    // auto fill splitter address if known and field empty or is placeholder
+    const mapped = SPLITTER_BY_CHAIN[cid];
+    if(mapped && mapped !== "0x0000000000000000000000000000000000000000"){
+      $("splitterAddr").value = mapped;
+    }
+  }
+
+  // ========= PARSERS =========
+  function parseLines(text){
+    return text.split("\n").map(s=>s.trim()).filter(Boolean);
+  }
+
+  // ========= WALLET =========
+  async function refreshChainAndAccount(){
+    if(!window.ethereum) return;
+    const cidHex = await window.ethereum.request({ method:"eth_chainId" });
+    const cid = parseInt(cidHex, 16);
+    setNetworkStatus(cid);
+
+    const accs = await window.ethereum.request({ method:"eth_accounts" });
+    if(accs && accs.length){
+      wallet = accs[0];
+      setWalletStatus(true, wallet);
+    } else {
+      wallet = null;
+      setWalletStatus(false, null);
+    }
+  }
+
+  async function connectWallet(){
+    if(!window.ethereum){
+      log("ERROR: MetaMask not detected (window.ethereum is undefined). Use Chrome/Brave with MetaMask enabled.");
+      alert("MetaMask not detected. Open this site in the browser/profile where MetaMask is installed & enabled.");
+      return;
+    }
+
+    try{
+      provider = new ethers.providers.Web3Provider(window.ethereum, "any");
+      log("Connecting wallet…");
+
+      const accs = await window.ethereum.request({ method:"eth_requestAccounts" });
+      if(!accs || !accs.length) throw new Error("No accounts returned.");
+
+      signer = provider.getSigner();
+      wallet = await signer.getAddress();
+      setWalletStatus(true, wallet);
+
+      const net = await provider.getNetwork();
+      setNetworkStatus(net.chainId);
+
+      log(`Connected. chainId=${net.chainId} wallet=${wallet}`);
+
+    }catch(err){
+      log(`ERROR: connect failed: ${err.message || err}`);
+      setWalletStatus(false, null);
+    }
+  }
+
+  async function switchNetwork(){
+    if(!window.ethereum){
+      alert("MetaMask not detected.");
+      return;
+    }
+
+    // default target: BSC (your screenshots)
+    const target = NETWORKS.bsc;
+
+    try{
+      log(`Switching network -> ${target.name} (${target.chainIdDec})`);
+      await window.ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: target.chainIdHex }]
+      });
+      await refreshChainAndAccount();
+      log("Network switched.");
+    }catch(err){
+      // If chain not added
+      const msg = (err && err.message) ? err.message : String(err);
+      log(`Network switch error: ${msg}`);
+
+      // try add chain (only where we have params)
+      if((err && err.code === 4902) && target.addParams){
+        try{
+          log(`Adding chain: ${target.name}`);
+          await window.ethereum.request({
+            method:"wallet_addEthereumChain",
+            params:[target.addParams]
+          });
+          await refreshChainAndAccount();
+          log("Chain added & active.");
+        }catch(e2){
+          log(`ERROR: add chain failed: ${e2.message || e2}`);
+        }
+      }
+    }
+  }
+
+  // ========= SPLITTER ACTIONS =========
+  async function approveToken(){
+    try{
+      if(!signer) throw new Error("Wallet not connected.");
+      const token = $("tokenAddr").value.trim();
+      const splitter = $("splitterAddr").value.trim();
+      const amtStr = $("amount").value.trim();
+
+      if(!ethers.utils.isAddress(token)) throw new Error("Invalid token address.");
+      if(!ethers.utils.isAddress(splitter)) throw new Error("Invalid splitter address.");
+      if(!amtStr) throw new Error("Enter amount.");
+
+      const erc20 = new ethers.Contract(token, ERC20_ABI, signer);
+
+      let decimals = 18;
+      try{
+        decimals = await erc20.decimals();
+      }catch(_){
+        // keep 18
+      }
+
+      let symbol = "";
+      try{
+        symbol = await erc20.symbol();
+      }catch(_){}
+
+      const amt = ethers.utils.parseUnits(amtStr, decimals);
+
+      log(`Token info: ${symbol || "TOKEN"} decimals=${decimals}`);
+      log(`Approving splitter for ${amtStr} tokens…`);
+
+      const tx = await erc20.approve(splitter, amt);
+      log(`Approve tx: ${tx.hash}`);
+      const rc = await tx.wait();
+      log(`Approve confirmed. block=${rc.blockNumber}`);
+
+    }catch(err){
+      log(`ERROR: approve failed: ${err.message || err}`);
+    }
+  }
+
+  async function executeSplit(){
+    try{
+      if(!signer) throw new Error("Wallet not connected.");
+
+      const token = $("tokenAddr").value.trim();
+      const splitterAddr = $("splitterAddr").value.trim();
+      const recipients = parseLines($("recipients").value);
+      const sharesRaw = parseLines($("shares").value);
+      const amtStr = $("amount").value.trim();
+
+      if(!ethers.utils.isAddress(token)) throw new Error("Invalid token address.");
+      if(!ethers.utils.isAddress(splitterAddr)) throw new Error("Invalid splitter address.");
+      if(!recipients.length) throw new Error("Add at least 1 recipient.");
+      if(recipients.some(a => !ethers.utils.isAddress(a))) throw new Error("One or more recipient addresses are invalid.");
+      if(sharesRaw.length !== recipients.length) throw new Error("Shares count must match recipients count.");
+
+      const shares = sharesRaw.map(s => {
+        if(!/^\d+$/.test(s)) throw new Error("Shares must be integers only.");
+        return ethers.BigNumber.from(s);
+      });
+
+      const erc20 = new ethers.Contract(token, ERC20_ABI, signer);
+      let decimals = 18;
+      try{ decimals = await erc20.decimals(); } catch(_){}
+      const amount = ethers.utils.parseUnits(amtStr || "0", decimals);
+      if(amount.lte(0)) throw new Error("Amount must be > 0.");
+
+      const splitter = new ethers.Contract(splitterAddr, SPLITTER_ABI, signer);
+
+      log(`Execute Split -> recipients=${recipients.length} amount=${amtStr}`);
+      log(`Calling depositAndDistribute…`);
+
+      const tx = await splitter.depositAndDistribute(token, recipients, shares, amount);
+      log(`Split tx: ${tx.hash}`);
+      const rc = await tx.wait();
+      log(`Split confirmed. block=${rc.blockNumber}`);
+
+    }catch(err){
+      log(`ERROR: split failed: ${err.message || err}`);
+    }
+  }
+
+  // ========= TABS =========
+  function setTab(which){
+    const isSplitter = which === "splitter";
+    $("tabSplitter").classList.toggle("active", isSplitter);
+    $("tabVault").classList.toggle("active", !isSplitter);
+    $("viewSplitter").style.display = isSplitter ? "" : "none";
+    $("viewVault").style.display = isSplitter ? "none" : "";
+    $("moduleTitle").textContent = isSplitter ? "Splitter Module" : "Vault Module";
+  }
+
+  // ========= INIT =========
+  function bind(){
+    $("btnConnect").addEventListener("click", connectWallet);
+    $("btnSwitch").addEventListener("click", switchNetwork);
+
+    $("btnApprove").addEventListener("click", approveToken);
+    $("btnExecute").addEventListener("click", executeSplit);
+
+    $("tabSplitter").addEventListener("click", () => setTab("splitter"));
+    $("tabVault").addEventListener("click", () => setTab("vault"));
+  }
+
+  async function init(){
+    bind();
+    log("ZEPHENHEL CONSOLE READY. Connect Wallet to arm the system.");
+
+    // “Not connecting” fix: always refresh state on load
+    if(window.ethereum){
+      // Listen for changes
+      window.ethereum.on("accountsChanged", async (accs) => {
+        log("Account changed. Reconnecting…");
+        await refreshChainAndAccount();
+      });
+      window.ethereum.on("chainChanged", async () => {
+        log("Chain changed. Updating status…");
+        await refreshChainAndAccount();
+      });
+
+      await refreshChainAndAccount();
+      // If already connected, light radar
+      setRadar(!!wallet, wallet ? "Active Scan" : "Passive Scan");
+    } else {
+      setRadar(false, "Passive Scan");
+      setWalletStatus(false, null);
+      netText.textContent = "Network: —";
+      log("WARNING: MetaMask not detected. window.ethereum is undefined.");
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", init);
+})();
+</script>
+</body>
+</html>
+    color: #d4af37;
       font-family: Arial, Helvetica, sans-serif;
     }
 
