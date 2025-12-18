@@ -1,520 +1,1012 @@
-/* global ethers */
+/* ZEPHENHEL CITADEL — Tri-chain Splitter + Vault shell (Edge/MetaMask) */
 
-(() => {
-  // Your deployed splitters
-  const SPLITTERS = {
-    bsc: "0x928B75D0fA6382D4B742afB6e500C9458B4f502c",
-    eth: "0x56FeE96eF295Cf282490592403B9A3C1304b91d2",
-    polygon: "0x05948E68137eC131E1f0E27028d09fa174679ED4"
-  };
+const { ethers } = window;
+if (!ethers) alert("Ethers failed to load. Check index.html CDN.");
 
-  const CHAIN = {
-    bsc: { chainId: 56, hex: "0x38", name: "BNB Chain", native: "BNB", gasReserve: "0.003", legacyGas: true },
-    eth: { chainId: 1, hex: "0x1", name: "Ethereum", native: "ETH", gasReserve: "0.005", legacyGas: false },
-    polygon: { chainId: 137, hex: "0x89", name: "Polygon", native: "MATIC", gasReserve: "0.02", legacyGas: true }
-  };
+// ====== YOUR DEPLOYED ADDRESSES ======
+const SPLITTER_BY_CHAIN = {
+  56: "0x928B75D0fA6382D4B742afB6e500C9458B4f502c", // BSC
+  1: "0x56FeE96eF295Cf282490592403B9A3C1304b91d2", // ETH
+  137: "0x05948E68137eC131E1f0E27028d09fa174679ED4", // POLY
+};
 
-  const PLATFORM_FEE_PCT = 1; // display + optional feeAdjust attempt
-  const TOTAL_CANDIDATES = [10000, 9900]; // basis-points total candidates
-  const FEE_ADJUST = [false, true]; // try sending amount, then 99% of amount
+const VAULT_BY_CHAIN = {
+  56: "0x69BD92784b9ED63a40d2cf51b475Ba68B37bD59E", // BSC inheritance
+  1: "0x886f915D21A5BC540E86655a89e6223981D875d8", // ETH inheritance
+  137: "0xde07160A2eC236315Dd27e9600f88Ba26F86f06e", // POLY inheritance
+};
 
-  const ERC20_ABI = [
-    "function symbol() view returns (string)",
-    "function decimals() view returns (uint8)",
-    "function balanceOf(address) view returns (uint256)",
-    "function allowance(address owner,address spender) view returns (uint256)",
-    "function approve(address spender,uint256 amount) returns (bool)"
-  ];
+// ====== CHAINS (for switch) ======
+const CHAINS = {
+  56: { name: "BNB Chain", chainIdHex: "0x38" },
+  1: { name: "Ethereum", chainIdHex: "0x1" },
+  137: { name: "Polygon", chainIdHex: "0x89" },
+};
 
-  const SPLITTER_ABI = [
-    "function splitToken(address token,uint256 amount,address[] recipients,uint256[] percents) external",
-    "function splitNative(address[] recipients,uint256[] percents) external payable"
-  ];
+// ====== Minimal ABIs for splitter + ERC20 ======
+// We will auto-try common function signatures.
+// Splitter contract could be:
+// splitToken(token, amount, recipients, percents/bps)
+// splitNative(recipients, percents/bps) OR splitNative(amount, recipients, percents/bps)
+//
+// We'll attempt multiple possibilities in order.
+const ERC20_ABI = [
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
+  "function balanceOf(address) view returns (uint256)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+];
 
-  const $ = (id) => document.getElementById(id);
+const SPLITTER_ABI_CANDIDATES = {
+  splitTokenA: ["function splitToken(address token,uint256 amount,address[] recipients,uint256[] percents)"],
+  splitTokenB: ["function splitToken(address token,uint256 amount,address[] recipients,uint256[] bps)"],
+  splitTokenC: ["function splitToken(address token,uint256 amount,address[] recipients,uint16[] bps)"],
+  splitNativeA:["function splitNative(address[] recipients,uint256[] percents) payable"],
+  splitNativeB:["function splitNative(address[] recipients,uint256[] bps) payable"],
+  splitNativeC:["function splitNative(uint256 amount,address[] recipients,uint256[] bps) payable"],
+  splitNativeD:["function splitNative(uint256 amount,address[] recipients,uint256[] percents) payable"],
+};
 
-  const netPill = $("netPill");
-  const acctPill = $("acctPill");
-  const connectBtn = $("connectBtn");
-  const switchBtn = $("switchBtn");
+// ====== UI refs ======
+const el = (id) => document.getElementById(id);
 
-  const networkSel = $("networkSel");
-  const tokenAddr = $("tokenAddr");
-  const amountIn = $("amount");
-  const maxBtn = $("maxBtn");
+const btnConnect = el("btnConnect");
+const btnSwitch = el("btnSwitch");
+const pillNet = el("pillNet");
+const pillWallet = el("pillWallet");
 
-  const recList = $("recList");
-  const addRecBtn = $("addRecBtn");
-  const totalPill = $("totalPill");
+const modeToken = el("modeToken");
+const modeNative = el("modeNative");
+const tokenModeFields = el("tokenModeFields");
 
-  const approveBtn = $("approveBtn");
-  const splitBtn = $("splitBtn");
+const tokenAddress = el("tokenAddress");
+const amountInput = el("amount");
+const btnMax = el("btnMax");
+const maxHint = el("maxHint");
 
-  const errBox = $("errBox");
-  const logEl = $("log");
-  const clearLogBtn = $("clearLogBtn");
-  const liveBtn = $("liveBtn");
+const usdEstimate = el("usdEstimate");
+const postFeeLine = el("postFeeLine");
 
-  const walletBalEl = $("walletBal");
-  const tokSymEl = $("tokSym");
-  const tokDecEl = $("tokDec");
-  const tokBalEl = $("tokBal");
-  const allowEl = $("allow");
-  const splitterAddrEl = $("splitterAddr");
+const recipientsBox = el("recipients");
+const btnAddRecipient = el("btnAddRecipient");
+const totalPct = el("totalPct");
 
-  const usdEstEl = $("usdEst");
-  const postFeeAmtEl = $("postFeeAmt");
-  const gasHint = $("gasHint");
-  const soundToggle = $("soundToggle");
+const btnApprove = el("btnApprove");
+const btnExecute = el("btnExecute");
 
-  let provider, signer;
-  let account = null;
-  let currentNetKey = "bsc";
-  let activeChainId = null;
+const nativeBal = el("nativeBal");
+const tokenSym = el("tokenSym");
+const tokenDec = el("tokenDec");
+const tokenBal = el("tokenBal");
+const allowanceEl = el("allowance");
+const spenderAddr = el("spenderAddr");
 
-  let token = null;
-  let tokenMeta = { symbol: "-", decimals: 18 };
-  let tokenPriceUSD = null;
+const btnRefresh = el("btnRefresh");
+const btnClearLog = el("btnClearLog");
+const logEl = el("log");
 
-  // default recipients
-  let recipients = [
-    { addr: "", pct: 50 },
-    { addr: "", pct: 50 }
-  ];
+const errBox = el("errBox");
+const tagSplitter = el("tagSplitter");
 
-  function log(msg) {
-    const t = new Date().toLocaleTimeString();
-    logEl.textContent += `[${t}] ${msg}\n`;
-    logEl.scrollTop = logEl.scrollHeight;
+const chkSound = el("chkSound");
+
+// Tabs
+document.querySelectorAll(".tab").forEach(t => {
+  t.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+    t.classList.add("active");
+    const tab = t.dataset.tab;
+    el("tab-split").style.display = (tab === "split") ? "" : "none";
+    el("tab-vault").style.display = (tab === "vault") ? "" : "none";
+  });
+});
+
+// Vault
+const vaultAddress = el("vaultAddress");
+const vaultAbi = el("vaultAbi");
+const btnLoadVault = el("btnLoadVault");
+const vaultActions = el("vaultActions");
+const vaultLog = el("vaultLog");
+const vaultErr = el("vaultErr");
+const btnClearVaultLog = el("btnClearVaultLog");
+
+btnClearVaultLog.addEventListener("click", () => vaultLog.textContent = "");
+
+// ====== State ======
+let provider, signer, userAddr, chainId;
+let currentSplitterAddr = null;
+let currentVaultAddr = null;
+
+let isNativeMode = false;
+
+// For token info
+let currentToken = null;
+let currentTokenMeta = { symbol: null, decimals: 18 };
+
+// Fee assumptions: we auto-detect by probing.
+const DEFAULT_PLATFORM_FEE_BPS = 100; // 1%
+// Native max gas reserve
+let GAS_RESERVE_NATIVE = ethers.utils.parseEther("0.003"); // matches your earlier note (0.003 BNB)
+
+// ====== Sound (WebAudio) ======
+let audioCtx = null;
+function ensureAudio() {
+  if (!chkSound.checked) return null;
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+function beep({freq=440, dur=0.08, type="sine", gain=0.08, when=0}={}) {
+  const ctx = ensureAudio();
+  if (!ctx) return;
+  const t0 = ctx.currentTime + when;
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t0);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(gain, t0 + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g).connect(ctx.destination);
+  o.start(t0);
+  o.stop(t0 + dur + 0.02);
+}
+function radarPing() {
+  // quick “ping sweep”
+  beep({freq: 520, dur: 0.05, type:"sine", gain:0.10, when:0});
+  beep({freq: 740, dur: 0.06, type:"sine", gain:0.10, when:0.06});
+  beep({freq: 980, dur: 0.07, type:"sine", gain:0.10, when:0.13});
+}
+function coinBeat(count=2) {
+  // “coins falling” = multiple little clicks with varying pitch
+  const n = Math.max(1, Math.min(24, count));
+  for (let i=0;i<n;i++){
+    const f = 520 + (i%6)*90 + (Math.random()*40);
+    beep({freq:f, dur:0.03, type:"triangle", gain:0.08, when:i*0.05});
   }
-  function showError(msg) { errBox.hidden = false; errBox.textContent = msg; }
-  function clearError() { errBox.hidden = true; errBox.textContent = ""; }
+}
 
-  function fmtAddr(a){ return a ? `${a.slice(0,6)}…${a.slice(-4)}` : "—"; }
-  function isAddr(a){ try{ return ethers.utils.isAddress(a); } catch { return false; } }
-  function toFloatSafe(s){ const v = Number(String(s).replace(/,/g,"")); return Number.isFinite(v)?v:0; }
+// ====== Helpers ======
+function shortAddr(a){
+  if (!a) return "—";
+  return a.slice(0,6)+"…"+a.slice(-4);
+}
+function log(msg){
+  const time = new Date().toLocaleTimeString();
+  logEl.textContent += `[${time}] ${msg}\n`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function showError(msg){
+  errBox.style.display = "";
+  errBox.textContent = msg;
+}
+function clearError(){
+  errBox.style.display = "none";
+  errBox.textContent = "";
+}
+function vLog(msg){
+  const time = new Date().toLocaleTimeString();
+  vaultLog.textContent += `[${time}] ${msg}\n`;
+  vaultLog.scrollTop = vaultLog.scrollHeight;
+}
+function showVaultError(msg){
+  vaultErr.style.display = "";
+  vaultErr.textContent = msg;
+}
+function clearVaultError(){
+  vaultErr.style.display = "none";
+  vaultErr.textContent = "";
+}
 
-  function tokenIsNative(){ return tokenAddr.value.trim() === ""; }
-  function nativeSymbol(){ return CHAIN[currentNetKey].native; }
+function validAddress(a){
+  try { return ethers.utils.isAddress(a); } catch { return false; }
+}
 
-  function setTopPills(){
-    const c = CHAIN[currentNetKey];
-    netPill.textContent = `Network: ${c.name} (chainId ${c.chainId})`;
-    acctPill.textContent = account ? `Wallet: ${fmtAddr(account)}` : `Wallet: Disconnected`;
-    splitterAddrEl.textContent = SPLITTERS[currentNetKey];
-
-    // button state
-    if (account) {
-      connectBtn.textContent = "Connected";
-      connectBtn.disabled = true;
-    } else {
-      connectBtn.textContent = "Connect";
-      connectBtn.disabled = false;
-    }
+function parseAmount(valueStr, decimals=18){
+  const s = (valueStr||"").trim();
+  if (!s) return null;
+  try {
+    return ethers.utils.parseUnits(s, decimals);
+  } catch {
+    return null;
   }
+}
 
-  function setGasHint(){
-    const reserve = CHAIN[currentNetKey].gasReserve;
-    gasHint.textContent = tokenIsNative()
-      ? `MAX reserves gas (${reserve} ${nativeSymbol()}).`
-      : `MAX is for native only. For tokens, enter a token amount.`;
+function formatUnitsSafe(x, decimals=18, maxFrac=6){
+  try {
+    const s = ethers.utils.formatUnits(x, decimals);
+    const [i,f] = s.split(".");
+    if (!f) return i;
+    return i + "." + f.slice(0, maxFrac);
+  } catch {
+    return "—";
   }
+}
 
-  function prettyErr(e){
-    const msg = e?.error?.message || e?.data?.message || e?.reason || e?.message || String(e);
-    return msg.replace(/\s+/g," ").trim();
+async function getChainState(){
+  chainId = await signer.getChainId();
+  currentSplitterAddr = SPLITTER_BY_CHAIN[chainId] || null;
+  currentVaultAddr = VAULT_BY_CHAIN[chainId] || null;
+
+  pillNet.textContent = `Network: ${CHAINS[chainId]?.name || ("chainId "+chainId)}`;
+  tagSplitter.textContent = `Splitter: ${currentSplitterAddr ? shortAddr(currentSplitterAddr) : "Unsupported network"}`;
+
+  vaultAddress.value = currentVaultAddr || "";
+  btnLoadVault.disabled = !currentVaultAddr;
+
+  if (!currentSplitterAddr) {
+    log("Unsupported network. Switch to BSC (56), Ethereum (1), or Polygon (137).");
   }
+}
 
-  function mustBeOnSelectedChain(){
-    const expected = CHAIN[currentNetKey].chainId;
-    if (activeChainId !== expected) {
-      throw new Error(`Wrong network. You are on chainId ${activeChainId}, but ${CHAIN[currentNetKey].name} is ${expected}. Click Switch Network.`);
-    }
+function setConnectedUI(connected){
+  if (connected) {
+    btnConnect.textContent = "CONNECTED";
+    btnConnect.classList.add("connected");
+    btnConnect.disabled = true;
+  } else {
+    btnConnect.textContent = "Connect";
+    btnConnect.classList.remove("connected");
+    btnConnect.disabled = false;
   }
+}
 
-  function renderRecipients(){
-    recList.innerHTML = "";
-    recipients.forEach((r, idx) => {
-      const row = document.createElement("div");
-      row.className = "recRow";
+function ensureRecipientsMin(){
+  if (getRecipients().length === 0) {
+    addRecipientRow("", 50);
+    addRecipientRow("", 50);
+  }
+}
 
-      const addr = document.createElement("input");
-      addr.className = "in";
-      addr.placeholder = "0xRecipient…";
-      addr.value = r.addr;
-      addr.oninput = () => { recipients[idx].addr = addr.value.trim(); };
+function getRecipients(){
+  const rows = [...recipientsBox.querySelectorAll(".row")];
+  return rows.map(r => ({
+    address: r.querySelector(".addr").value.trim(),
+    pct: Number(r.querySelector(".pct").value || 0)
+  }));
+}
+function setTotalPct(){
+  const rs = getRecipients();
+  const sum = rs.reduce((a,b)=>a + (isFinite(b.pct)?b.pct:0), 0);
+  totalPct.textContent = `${sum.toFixed(2)}%`;
+}
 
-      const pct = document.createElement("input");
-      pct.className = "in";
-      pct.placeholder = "Percent";
-      pct.inputMode = "decimal";
-      pct.value = String(r.pct ?? "");
-      pct.oninput = () => {
-        recipients[idx].pct = toFloatSafe(pct.value);
-        updateTotal();
-        updateEstimates();
-      };
+function addRecipientRow(addr="", pct=50){
+  const row = document.createElement("div");
+  row.className = "row";
 
-      const rm = document.createElement("button");
-      rm.className = "xbtn";
-      rm.textContent = "✕";
-      rm.onclick = () => {
-        recipients.splice(idx,1);
-        renderRecipients();
-        updateTotal();
-        updateEstimates();
-      };
+  const a = document.createElement("input");
+  a.className = "addr";
+  a.placeholder = "0xRecipient…";
+  a.value = addr;
+  a.spellcheck = false;
 
-      row.appendChild(addr);
-      row.appendChild(pct);
-      row.appendChild(rm);
-      recList.appendChild(row);
+  const p = document.createElement("input");
+  p.className = "pct";
+  p.type = "number";
+  p.min = "0";
+  p.max = "100";
+  p.step = "0.01";
+  p.value = String(pct);
+
+  const del = document.createElement("button");
+  del.className = "iconbtn";
+  del.textContent = "×";
+  del.title = "Remove";
+
+  a.addEventListener("input", validateAll);
+  p.addEventListener("input", () => { setTotalPct(); validateAll(); });
+
+  del.addEventListener("click", () => {
+    row.remove();
+    setTotalPct();
+    validateAll();
+  });
+
+  row.appendChild(a);
+  row.appendChild(p);
+  row.appendChild(del);
+
+  recipientsBox.appendChild(row);
+  setTotalPct();
+}
+
+// ====== Mode switching ======
+modeToken.addEventListener("click", () => {
+  isNativeMode = false;
+  modeToken.classList.add("active");
+  modeNative.classList.remove("active");
+  tokenModeFields.style.display = "";
+  maxHint.textContent = "MAX is for native only. For tokens, enter a token amount.";
+  validateAll();
+});
+modeNative.addEventListener("click", () => {
+  isNativeMode = true;
+  modeNative.classList.add("active");
+  modeToken.classList.remove("active");
+  tokenModeFields.style.display = "none";
+  maxHint.textContent = "MAX uses your native balance minus reserved gas (default 0.003).";
+  validateAll();
+});
+
+btnAddRecipient.addEventListener("click", () => {
+  addRecipientRow("", 0);
+  validateAll();
+});
+
+// ====== Connect / Switch ======
+btnConnect.addEventListener("click", connectWallet);
+btnSwitch.addEventListener("click", async () => {
+  if (!window.ethereum) return alert("MetaMask not detected.");
+  // rotate between chains
+  const options = [56,1,137];
+  const idx = Math.max(0, options.indexOf(chainId));
+  const next = options[(idx+1) % options.length];
+  await switchTo(next);
+});
+
+async function switchTo(targetChainId){
+  try{
+    await window.ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: CHAINS[targetChainId].chainIdHex }]
     });
+  }catch(e){
+    alert("Switch failed. Try switching inside MetaMask.");
   }
+}
 
-  function updateTotal(){
-    const total = recipients.reduce((a,r)=>a + (Number(r.pct)||0),0);
-    totalPill.textContent = `Total: ${total.toFixed(2)}%`;
-    return total;
-  }
+async function connectWallet(){
+  clearError();
+  if (!window.ethereum) return alert("MetaMask not detected.");
 
-  function validateRecipients(){
-    if (recipients.length < 1) throw new Error("Add at least 1 recipient.");
-    const total = recipients.reduce((a,r)=>a + (Number(r.pct)||0),0);
-    if (Math.abs(total - 100) > 0.0001) throw new Error("Total percent must equal 100.");
-    const bad = recipients.find(r => !isAddr(r.addr));
-    if (bad) throw new Error("One or more recipient addresses are invalid.");
-  }
+  provider = new ethers.providers.Web3Provider(window.ethereum, "any");
+  await provider.send("eth_requestAccounts", []);
+  signer = provider.getSigner();
+  userAddr = await signer.getAddress();
 
-  function buildBps(requiredTotal){
-    const pcts = recipients.map(r => Number(r.pct)||0);
-    const raw = pcts.map(p => Math.floor((p/100)*requiredTotal));
-    let sum = raw.reduce((a,b)=>a+b,0);
-    let rem = requiredTotal - sum;
+  pillWallet.textContent = `Wallet: ${shortAddr(userAddr)}`;
+  setConnectedUI(true);
+  radarPing();
 
-    const order = pcts.map((p,i)=>({p,i})).sort((a,b)=>b.p-a.p);
-    let k = 0;
-    while (rem > 0) {
-      raw[order[k % order.length].i] += 1;
-      rem--; k++;
-    }
-    return raw.map(x => ethers.BigNumber.from(x));
-  }
+  await getChainState();
 
-  async function fetchDexPriceUSD(tokenAddress){
-    try{
-      const url = `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`;
-      const r = await fetch(url);
-      if (!r.ok) return null;
-      const data = await r.json();
-      const pairs = Array.isArray(data.pairs) ? data.pairs : [];
-      const chainName = currentNetKey === "bsc" ? "bsc" : (currentNetKey === "eth" ? "ethereum" : "polygon");
-      const best = pairs.find(p => String(p.chainId||"").toLowerCase() === chainName) || pairs[0];
-      const px = best?.priceUsd ? Number(best.priceUsd) : null;
-      return Number.isFinite(px) ? px : null;
-    } catch { return null; }
-  }
+  log(`Connected: ${userAddr} (chainId ${chainId})`);
+  ensureRecipientsMin();
+  await refreshTelemetry();
+  validateAll();
 
-  function updateEstimates(){
-    const amt = toFloatSafe(amountIn.value);
-    if (!(amt > 0)) { usdEstEl.textContent="—"; postFeeAmtEl.textContent="—"; return; }
-    const post = amt * (1 - PLATFORM_FEE_PCT/100);
-    postFeeAmtEl.textContent = `${post.toFixed(6)} ${tokenMeta.symbol} (post-fee est)`;
-    usdEstEl.textContent = tokenPriceUSD ? `$${(amt*tokenPriceUSD).toFixed(2)}` : "—";
-  }
-
-  async function ensureProvider(){
-    if (!window.ethereum) { showError("MetaMask not detected."); return false; }
-    provider = new ethers.providers.Web3Provider(window.ethereum, "any");
-    signer = provider.getSigner();
-    return true;
-  }
-
-  async function refreshWalletAndToken(){
-    if (!provider || !account) return;
-    setTopPills(); setGasHint();
-
-    const bal = await provider.getBalance(account);
-    walletBalEl.textContent = `${ethers.utils.formatEther(bal)} ${nativeSymbol()}`;
-
-    if (tokenIsNative()){
-      token = null;
-      tokenMeta = { symbol: nativeSymbol(), decimals: 18 };
-      tokSymEl.textContent = nativeSymbol();
-      tokDecEl.textContent = "18";
-      tokBalEl.textContent = `${ethers.utils.formatEther(bal)} ${nativeSymbol()}`;
-      allowEl.textContent = "— (native)";
-      tokenPriceUSD = null;
-      updateEstimates();
+  // listeners
+  window.ethereum.on("accountsChanged", async (accs) => {
+    if (!accs || !accs.length) {
+      userAddr = null;
+      pillWallet.textContent = "Wallet: Disconnected";
+      setConnectedUI(false);
       return;
     }
+    userAddr = accs[0];
+    pillWallet.textContent = `Wallet: ${shortAddr(userAddr)}`;
+    log(`Account changed: ${userAddr}`);
+    await refreshTelemetry();
+    validateAll();
+  });
 
-    const tAddr = tokenAddr.value.trim();
-    if (!isAddr(tAddr)) return;
+  window.ethereum.on("chainChanged", async () => {
+    // force refresh chain state
+    provider = new ethers.providers.Web3Provider(window.ethereum, "any");
+    signer = provider.getSigner();
+    chainId = await signer.getChainId();
+    await getChainState();
+    log(`Network changed. Now chainId ${chainId}`);
+    await refreshTelemetry();
+    validateAll();
+  });
+}
 
-    token = new ethers.Contract(tAddr, ERC20_ABI, signer);
-    const [sym, dec] = await Promise.all([token.symbol(), token.decimals()]);
-    tokenMeta = { symbol: sym, decimals: Number(dec) };
-    tokSymEl.textContent = sym;
-    tokDecEl.textContent = String(dec);
+// ====== Dexscreener USD estimate ======
+async function fetchDexUsd(chainId, tokenAddr){
+  // best-effort: Dexscreener pair search by token
+  // endpoint uses chain name: bsc / ethereum / polygon
+  const chainName =
+    chainId === 56 ? "bsc" :
+    chainId === 1 ? "ethereum" :
+    chainId === 137 ? "polygon" : null;
 
-    const [tbal, alw] = await Promise.all([
-      token.balanceOf(account),
-      token.allowance(account, SPLITTERS[currentNetKey])
-    ]);
-    tokBalEl.textContent = `${ethers.utils.formatUnits(tbal, dec)} ${sym}`;
-    allowEl.textContent = `${ethers.utils.formatUnits(alw, dec)} ${sym}`;
+  if (!chainName) return null;
 
-    tokenPriceUSD = await fetchDexPriceUSD(tAddr);
-    log(`Token loaded: ${sym} (decimals ${dec})${tokenPriceUSD ? ` • $${tokenPriceUSD}` : ""}`);
-    updateEstimates();
+  try{
+    const url = `https://api.dexscreener.com/latest/dex/tokens/${tokenAddr}`;
+    const r = await fetch(url);
+    const j = await r.json();
+    if (!j || !j.pairs || !j.pairs.length) return null;
+
+    // pick best pair on this chain by liquidity USD
+    const pairs = j.pairs.filter(p => (p.chainId || "").toLowerCase() === chainName);
+    const best = (pairs.length ? pairs : j.pairs).sort((a,b) => (b.liquidity?.usd||0) - (a.liquidity?.usd||0))[0];
+    const price = Number(best.priceUsd || 0);
+    if (!isFinite(price) || price <= 0) return null;
+    return price;
+  }catch{
+    return null;
   }
+}
 
-  async function connect(){
-    clearError();
-    if (!(await ensureProvider())) return;
+// ====== Telemetry ======
+btnRefresh.addEventListener("click", refreshTelemetry);
+btnClearLog.addEventListener("click", () => logEl.textContent = "");
 
-    const accts = await provider.send("eth_requestAccounts", []);
-    account = accts?.[0] || null;
+async function refreshTelemetry(){
+  if (!signer || !userAddr) return;
 
-    const net = await provider.getNetwork();
-    activeChainId = net.chainId;
+  clearError();
 
-    // auto-select net key
-    currentNetKey = activeChainId === 56 ? "bsc" : (activeChainId === 1 ? "eth" : (activeChainId === 137 ? "polygon" : currentNetKey));
-    networkSel.value = currentNetKey;
+  // native balance
+  const bal = await provider.getBalance(userAddr);
+  const sym = chainId === 56 ? "BNB" : chainId === 137 ? "MATIC" : "ETH";
+  nativeBal.textContent = `${formatUnitsSafe(bal, 18, 6)} ${sym}`;
 
-    log(`Connected: ${account} on chainId ${activeChainId}`);
-    setTopPills(); setGasHint();
-    await refreshWalletAndToken();
-  }
+  // splitter address
+  spenderAddr.textContent = currentSplitterAddr ? `Spender: ${currentSplitterAddr}` : "Spender: —";
 
-  async function switchNetwork(){
-    clearError();
-    const target = CHAIN[currentNetKey];
+  // token info if token mode + valid address
+  if (!isNativeMode && validAddress(tokenAddress.value.trim())) {
+    const tAddr = tokenAddress.value.trim();
+    currentToken = new ethers.Contract(tAddr, ERC20_ABI, signer);
+
     try{
-      await window.ethereum.request({ method:"wallet_switchEthereumChain", params:[{ chainId: target.hex }] });
-      window.location.reload();
-    } catch(e){
-      showError(`Switch failed: ${prettyErr(e)}`);
-    }
-  }
+      const [s, d] = await Promise.all([currentToken.symbol(), currentToken.decimals()]);
+      currentTokenMeta.symbol = s;
+      currentTokenMeta.decimals = d;
+      tokenSym.textContent = s;
+      tokenDec.textContent = String(d);
 
-  async function setMax(){
-    clearError();
-    try{
-      if (!account) throw new Error("Connect wallet first.");
-      mustBeOnSelectedChain();
-      if (!tokenIsNative()) throw new Error("MAX is for native coin only (leave token blank).");
+      const [tb, al] = await Promise.all([
+        currentToken.balanceOf(userAddr),
+        currentToken.allowance(userAddr, currentSplitterAddr || ethers.constants.AddressZero)
+      ]);
 
-      const bal = await provider.getBalance(account);
-      const reserve = ethers.utils.parseEther(CHAIN[currentNetKey].gasReserve);
-      const max = bal.gt(reserve) ? bal.sub(reserve) : ethers.BigNumber.from(0);
-      amountIn.value = ethers.utils.formatEther(max);
-      updateEstimates();
-      log(`MAX set (reserved ${CHAIN[currentNetKey].gasReserve} ${nativeSymbol()} for gas)`);
-    } catch(e){
-      showError(`MAX failed: ${prettyErr(e)}`);
-    }
-  }
+      tokenBal.textContent = `${formatUnitsSafe(tb, d, 6)} ${s}`;
+      allowanceEl.textContent = `${formatUnitsSafe(al, d, 6)} ${s}`;
 
-  async function approve(){
-    clearError();
-    try{
-      if (!account) throw new Error("Connect wallet first.");
-      mustBeOnSelectedChain();
-      if (tokenIsNative()) throw new Error("Approve not needed for native.");
-      if (!token) throw new Error("Enter a valid token address.");
-
-      const amt = toFloatSafe(amountIn.value);
-      if (!(amt > 0)) throw new Error("Enter an amount > 0.");
-
-      const parsed = ethers.utils.parseUnits(String(amt), tokenMeta.decimals);
-      log(`Approving ${tokenMeta.symbol} for splitter ${SPLITTERS[currentNetKey]}…`);
-
-      const tx = await token.approve(SPLITTERS[currentNetKey], parsed);
-      log(`Approve tx: ${tx.hash}`);
-      await tx.wait();
-      log(`Approve confirmed ✅`);
-      await refreshWalletAndToken();
-    } catch(e){
-      showError(`Approve failed: ${prettyErr(e)}`);
-      log(`Approve failed: ${prettyErr(e)}`);
-    }
-  }
-
-  function parseAmountBN(uiAmount, feeAdjust){
-    const amt = Number(uiAmount);
-    if (!(amt > 0)) throw new Error("Enter an amount > 0.");
-    const sendAmt = feeAdjust ? (amt * (1 - PLATFORM_FEE_PCT/100)) : amt;
-    return tokenIsNative()
-      ? ethers.utils.parseEther(String(sendAmt))
-      : ethers.utils.parseUnits(String(sendAmt), tokenMeta.decimals);
-  }
-
-  // FORCE legacy gas price on BSC/Polygon (MetaMask/Edge stability)
-  async function gasOverrides(){
-    const cfg = CHAIN[currentNetKey];
-    const o = {};
-    if (cfg.legacyGas) {
-      const gp = await provider.getGasPrice();
-      o.gasPrice = gp.mul(12).div(10); // +20% to avoid underpriced / stuck tx
-    }
-    return o;
-  }
-
-  async function sendWithFallback(contract, fnName, args, overrides){
-    // 1) normal contract call
-    try{
-      return await contract[fnName](...args, overrides);
-    } catch(e){
-      // 2) raw sendTransaction fallback (bypasses some MetaMask wrapper weirdness)
-      log(`Contract call failed, trying raw tx fallback… (${prettyErr(e)})`);
-      const data = contract.interface.encodeFunctionData(fnName, args);
-      const txReq = {
-        to: contract.address,
-        data,
-        ...overrides
-      };
-      if (overrides?.value) txReq.value = overrides.value;
-      return await signer.sendTransaction(txReq);
-    }
-  }
-
-  async function split(){
-    clearError();
-    try{
-      if (!account) throw new Error("Connect wallet first.");
-      mustBeOnSelectedChain();
-      validateRecipients();
-
-      const recAddrs = recipients.map(r => r.addr);
-      const splitter = new ethers.Contract(SPLITTERS[currentNetKey], SPLITTER_ABI, signer);
-
-      if (!tokenIsNative() && !token) throw new Error("Enter a valid token address.");
-
-      // sanity: ensure balance + allowance cover entered amount
-      if (!tokenIsNative()){
-        const uiAmt = toFloatSafe(amountIn.value);
-        const wantBN = ethers.utils.parseUnits(String(uiAmt), tokenMeta.decimals);
-        const [bal, alw] = await Promise.all([
-          token.balanceOf(account),
-          token.allowance(account, SPLITTERS[currentNetKey])
-        ]);
-        if (bal.lt(wantBN)) throw new Error("Insufficient token balance.");
-        if (alw.lt(wantBN)) log("Warning: allowance < amount. Approve again if execute fails.");
+      // USD estimate
+      const px = await fetchDexUsd(chainId, tAddr);
+      const amt = parseFloat(amountInput.value || "0");
+      if (px && isFinite(amt) && amt > 0) {
+        const usd = amt * px;
+        usdEstimate.textContent = `$${usd.toFixed(2)}`;
+      } else {
+        usdEstimate.textContent = "$—";
       }
+    }catch(e){
+      tokenSym.textContent = "—";
+      tokenDec.textContent = "—";
+      tokenBal.textContent = "—";
+      allowanceEl.textContent = "—";
+      usdEstimate.textContent = "$—";
+      log(`Token read failed: ${e?.message || e}`);
+    }
+  } else {
+    // native mode or invalid token
+    tokenSym.textContent = isNativeMode ? "(native)" : "—";
+    tokenDec.textContent = isNativeMode ? "18" : "—";
+    tokenBal.textContent = "—";
+    allowanceEl.textContent = "—";
 
-      const baseOv = await gasOverrides();
+    // USD estimate for native
+    const amt = parseFloat(amountInput.value || "0");
+    if (isNativeMode && amt > 0) {
+      // Dexscreener token endpoint for native isn't consistent; leave blank.
+      usdEstimate.textContent = "$—";
+    } else {
+      usdEstimate.textContent = "$—";
+    }
+  }
 
-      // Try combinations until one works
-      let lastErr = null;
-      for (const total of TOTAL_CANDIDATES){
-        const bps = buildBps(total);
+  updatePostFeePreview();
+}
 
-        for (const feeAdjust of FEE_ADJUST){
+function updatePostFeePreview(){
+  const feePct = 1; // UI display only
+  const amt = parseFloat(amountInput.value || "0");
+  if (!isFinite(amt) || amt <= 0) {
+    postFeeLine.textContent = "You receive (post-fee): —";
+    return;
+  }
+  const net = amt * (1 - feePct/100);
+  postFeeLine.textContent = `You receive (post-fee): ${net.toFixed(6).replace(/0+$/,"").replace(/\.$/,"")}`;
+}
+
+// react to inputs
+tokenAddress.addEventListener("input", async () => {
+  validateAll();
+  await refreshTelemetry();
+});
+amountInput.addEventListener("input", async () => {
+  validateAll();
+  updatePostFeePreview();
+  await refreshTelemetry();
+});
+
+// ====== MAX (native only, reserve gas) ======
+btnMax.addEventListener("click", async () => {
+  if (!signer || !userAddr) return;
+  if (!isNativeMode) {
+    showError("MAX is only for native. For tokens, enter a token amount.");
+    return;
+  }
+  clearError();
+  const bal = await provider.getBalance(userAddr);
+  const spendable = bal.sub(GAS_RESERVE_NATIVE);
+  if (spendable.lte(0)) {
+    showError("Not enough native balance after gas reserve.");
+    return;
+  }
+  amountInput.value = ethers.utils.formatEther(spendable);
+  updatePostFeePreview();
+  await refreshTelemetry();
+  validateAll();
+});
+
+// ====== Validation ======
+function validateAll(){
+  clearError();
+
+  const connected = !!(signer && userAddr);
+  btnExecute.disabled = true;
+  btnApprove.disabled = true;
+
+  if (!connected) return;
+
+  if (!currentSplitterAddr) {
+    showError("Unsupported network. Switch to BSC / Ethereum / Polygon.");
+    return;
+  }
+
+  const rs = getRecipients();
+  if (rs.length < 1) {
+    showError("Add at least one recipient.");
+    return;
+  }
+
+  // addresses valid
+  for (const r of rs) {
+    if (!validAddress(r.address)) {
+      showError("One or more recipient addresses are invalid.");
+      return;
+    }
+  }
+
+  // percent sum
+  const sum = rs.reduce((a,b)=>a + (isFinite(b.pct)?b.pct:0), 0);
+  if (Math.abs(sum - 100) > 0.01) {
+    showError("Recipient percents must total 100.00%.");
+    return;
+  }
+
+  // amount
+  const amt = (amountInput.value || "").trim();
+  if (!amt || Number(amt) <= 0) {
+    showError("Enter an amount greater than 0.");
+    return;
+  }
+
+  // token mode requires token address
+  if (!isNativeMode) {
+    if (!validAddress(tokenAddress.value.trim())) {
+      showError("Enter a valid token contract address.");
+      return;
+    }
+    btnApprove.disabled = false;
+  } else {
+    // native mode = no approve
+    btnApprove.disabled = true;
+  }
+
+  btnExecute.disabled = false;
+}
+
+// ====== Approve (tokens) ======
+btnApprove.addEventListener("click", async () => {
+  clearError();
+  if (!currentToken || !currentSplitterAddr) {
+    showError("Load a valid token address first.");
+    return;
+  }
+  try{
+    const dec = currentTokenMeta.decimals ?? 18;
+    const amtUnits = parseAmount(amountInput.value, dec);
+    if (!amtUnits) throw new Error("Bad amount for token decimals.");
+
+    log(`Approving ${currentTokenMeta.symbol || "token"} for splitter ${shortAddr(currentSplitterAddr)}…`);
+    const tx = await currentToken.approve(currentSplitterAddr, amtUnits);
+    log(`Approve tx sent: ${tx.hash}`);
+    await tx.wait();
+    log("Approve confirmed ✅");
+    await refreshTelemetry();
+  }catch(e){
+    showError(`Approve failed: ${humanErr(e)}`);
+    log(`Approve failed: ${humanErr(e)}`);
+  }
+});
+
+// ====== Percent scale auto-detection ======
+function buildPercentsArray(scale, feeBpsAdjust=false){
+  // user enters 0-100 percents
+  const rs = getRecipients();
+  const pcts = rs.map(r => r.pct);
+
+  // if scale is 100 => send raw percents with 2 decimals folded? we keep integers
+  // if scale is 10000 => basis points
+  // if fee adjust => total becomes (scale - feeBps)
+  let raw;
+
+  if (scale === 10000) {
+    raw = pcts.map(x => Math.round(x * 100)); // 50 -> 5000 bps
+  } else if (scale === 100) {
+    raw = pcts.map(x => Math.round(x)); // 50 -> 50
+  } else {
+    // generic: scale across 100
+    raw = pcts.map(x => Math.round(x * (scale/100)));
+  }
+
+  // normalize rounding drift so sum matches expected
+  const expected = feeBpsAdjust ? (scale - DEFAULT_PLATFORM_FEE_BPS) : scale;
+  let sum = raw.reduce((a,b)=>a+b,0);
+  let delta = expected - sum;
+  if (delta !== 0) {
+    // push delta into the largest share
+    let idx = 0;
+    for (let i=1;i<raw.length;i++){
+      if (raw[i] > raw[idx]) idx = i;
+    }
+    raw[idx] += delta;
+  }
+
+  return raw;
+}
+
+async function tryCallStaticSplit({tokenAddr, amountUnits, recipients, percentsArr, valueWei, variantName}){
+  const abi = SPLITTER_ABI_CANDIDATES[variantName];
+  const c = new ethers.Contract(currentSplitterAddr, abi, signer);
+
+  if (variantName.startsWith("splitToken")) {
+    return await c.callStatic.splitToken(tokenAddr, amountUnits, recipients, percentsArr, { value: valueWei || 0 });
+  } else {
+    // native variants
+    if (variantName === "splitNativeC" || variantName === "splitNativeD") {
+      return await c.callStatic.splitNative(amountUnits, recipients, percentsArr, { value: valueWei });
+    } else {
+      return await c.callStatic.splitNative(recipients, percentsArr, { value: valueWei });
+    }
+  }
+}
+
+async function sendSplitTx({tokenAddr, amountUnits, recipients, percentsArr, valueWei, variantName}){
+  const abi = SPLITTER_ABI_CANDIDATES[variantName];
+  const c = new ethers.Contract(currentSplitterAddr, abi, signer);
+
+  if (variantName.startsWith("splitToken")) {
+    return await c.splitToken(tokenAddr, amountUnits, recipients, percentsArr);
+  } else {
+    if (variantName === "splitNativeC" || variantName === "splitNativeD") {
+      return await c.splitNative(amountUnits, recipients, percentsArr, { value: valueWei });
+    } else {
+      return await c.splitNative(recipients, percentsArr, { value: valueWei });
+    }
+  }
+}
+
+// ====== Execute Split (auto-detect scale + fee) ======
+btnExecute.addEventListener("click", async () => {
+  clearError();
+  if (!signer || !userAddr) return;
+
+  try{
+    const rs = getRecipients();
+    const recipients = rs.map(r => ethers.utils.getAddress(r.address));
+    if (!currentSplitterAddr) throw new Error("Unsupported network.");
+
+    const soundCount = recipients.length;
+
+    if (!isNativeMode) {
+      // token split
+      const tAddr = tokenAddress.value.trim();
+      if (!validAddress(tAddr)) throw new Error("Invalid token address.");
+      const dec = currentTokenMeta.decimals ?? 18;
+      const amtUnits = parseAmount(amountInput.value, dec);
+      if (!amtUnits) throw new Error("Invalid amount for token.");
+
+      log(`Preflight: splitToken(token=${shortAddr(tAddr)}, amount=${formatUnitsSafe(amtUnits, dec, 6)}, recipients=${recipients.length})…`);
+
+      // Try combos:
+      // - scale 10000 total 10000
+      // - scale 10000 total 9900 (fee adjust)
+      // - scale 100 total 100
+      const scalesToTry = [
+        { scale: 10000, feeAdj: false },
+        { scale: 10000, feeAdj: true },
+        { scale: 100, feeAdj: false },
+      ];
+
+      const variants = ["splitTokenA", "splitTokenB", "splitTokenC"];
+
+      let chosen = null;
+
+      for (const v of variants){
+        for (const s of scalesToTry){
+          const perc = buildPercentsArray(s.scale, s.feeAdj);
+          const sum = perc.reduce((a,b)=>a+b,0);
+          log(`Preflight callStatic using ${v} scale=${s.scale} feeAdj=${s.feeAdj} sum=${sum}…`);
           try{
-            const amountBN = parseAmountBN(amountIn.value, feeAdjust);
-
-            log(`Attempt: total=${total}, feeAdjust=${feeAdjust ? "ON" : "OFF"}`);
-
-            // callStatic preflight (with from/value)
-            if (tokenIsNative()){
-              await splitter.callStatic.splitNative(recAddrs, bps, { from: account, value: amountBN });
-            } else {
-              await splitter.callStatic.splitToken(token.address, amountBN, recAddrs, bps, { from: account });
-            }
-            log(`Preflight OK ✅`);
-
-            // estimate gas with strong multiplier; fallback if estimate fails
-            let gasLimit;
-            try{
-              const est = tokenIsNative()
-                ? await splitter.estimateGas.splitNative(recAddrs, bps, { value: amountBN, ...baseOv })
-                : await splitter.estimateGas.splitToken(token.address, amountBN, recAddrs, bps, { ...baseOv });
-
-              gasLimit = est.mul(18).div(10); // 1.8x
-              log(`Gas est=${est.toString()} → gasLimit=${gasLimit.toString()}`);
-            } catch(ge){
-              gasLimit = ethers.BigNumber.from(tokenIsNative() ? "800000" : "1100000");
-              log(`estimateGas failed → fallback gasLimit=${gasLimit.toString()} (${prettyErr(ge)})`);
-            }
-
-            const overrides = { gasLimit, ...baseOv };
-            if (tokenIsNative()) overrides.value = amountBN;
-
-            // execute
-            const tx = tokenIsNative()
-              ? await sendWithFallback(splitter, "splitNative", [recAddrs, bps], overrides)
-              : await sendWithFallback(splitter, "splitToken", [token.address, amountBN, recAddrs, bps], overrides);
-
-            log(`TX sent: ${tx.hash}`);
-            await tx.wait();
-            log(`Split complete ✅ (total=${total}, feeAdjust=${feeAdjust ? "ON" : "OFF"})`);
-
-            await refreshWalletAndToken();
-            return;
-          } catch(e){
-            lastErr = e;
-            log(`Failed: ${prettyErr(e)}`);
+            await tryCallStaticSplit({
+              tokenAddr: tAddr,
+              amountUnits: amtUnits,
+              recipients,
+              percentsArr: perc,
+              variantName: v
+            });
+            chosen = { variant: v, percents: perc, scale: s.scale, feeAdj: s.feeAdj };
+            log(`Preflight OK ✅ using ${v} scale=${s.scale} feeAdj=${s.feeAdj}`);
+            break;
+          }catch(e){
+            // keep trying
           }
         }
+        if (chosen) break;
       }
 
-      throw new Error(`All attempts failed. Last error: ${prettyErr(lastErr)}`);
-    } catch(e){
-      showError(`Split failed: ${prettyErr(e)}`);
-      log(`Split failed: ${prettyErr(e)}`);
-    }
-  }
-
-  function wire(){
-    renderRecipients();
-    updateTotal();
-    updateEstimates();
-    setTopPills();
-    setGasHint();
-
-    connectBtn.onclick = connect;
-    switchBtn.onclick = switchNetwork;
-
-    networkSel.onchange = async () => {
-      currentNetKey = networkSel.value;
-      setTopPills(); setGasHint();
-      tokenPriceUSD = null;
-      if (provider) {
-        const net = await provider.getNetwork();
-        activeChainId = net.chainId;
+      if (!chosen) {
+        throw new Error("Preflight failed for all percent scales. This usually means the splitter expects a different percent rule or additional constraints.");
       }
-      await refreshWalletAndToken();
-    };
 
-    tokenAddr.oninput = async () => {
-      tokenPriceUSD = null;
-      await refreshWalletAndToken();
-    };
+      coinBeat(soundCount);
 
-    amountIn.oninput = updateEstimates;
-    maxBtn.onclick = setMax;
+      log(`Sending split tx…`);
+      const tx = await sendSplitTx({
+        tokenAddr: tAddr,
+        amountUnits: amtUnits,
+        recipients,
+        percentsArr: chosen.percents,
+        variantName: chosen.variant
+      });
 
-    addRecBtn.onclick = () => {
-      recipients.push({ addr:"", pct:0 });
-      renderRecipients(); updateTotal(); updateEstimates();
-    };
+      log(`Split tx sent: ${tx.hash}`);
+      await tx.wait();
+      log("Split confirmed ✅");
+      await refreshTelemetry();
 
-    approveBtn.onclick = approve;
-    splitBtn.onclick = split;
+    } else {
+      // native split
+      const amtWei = ethers.utils.parseEther(String(amountInput.value));
+      if (amtWei.lte(0)) throw new Error("Amount must be > 0.");
 
-    clearLogBtn.onclick = () => { logEl.textContent = ""; };
-    liveBtn.onclick = refreshWalletAndToken;
+      log(`Preflight: splitNative(amount=${ethers.utils.formatEther(amtWei)}, recipients=${recipients.length})…`);
 
-    if (window.ethereum){
-      window.ethereum.on("accountsChanged", () => window.location.reload());
-      window.ethereum.on("chainChanged", () => window.location.reload());
+      const scalesToTry = [
+        { scale: 10000, feeAdj: false },
+        { scale: 10000, feeAdj: true },
+        { scale: 100, feeAdj: false },
+      ];
+      const variants = ["splitNativeA","splitNativeB","splitNativeC","splitNativeD"];
+
+      let chosen = null;
+
+      for (const v of variants){
+        for (const s of scalesToTry){
+          const perc = buildPercentsArray(s.scale, s.feeAdj);
+          const sum = perc.reduce((a,b)=>a+b,0);
+          log(`Preflight callStatic using ${v} scale=${s.scale} feeAdj=${s.feeAdj} sum=${sum}…`);
+          try{
+            await tryCallStaticSplit({
+              amountUnits: amtWei,
+              recipients,
+              percentsArr: perc,
+              valueWei: amtWei,
+              variantName: v
+            });
+            chosen = { variant: v, percents: perc, scale: s.scale, feeAdj: s.feeAdj };
+            log(`Preflight OK ✅ using ${v} scale=${s.scale} feeAdj=${s.feeAdj}`);
+            break;
+          }catch(e){
+            // keep trying
+          }
+        }
+        if (chosen) break;
+      }
+
+      if (!chosen) {
+        throw new Error("Preflight failed for all native split variants. The contract might use a different function name/signature.");
+      }
+
+      coinBeat(soundCount);
+
+      log(`Sending native split tx…`);
+      const tx = await sendSplitTx({
+        amountUnits: amtWei,
+        recipients,
+        percentsArr: chosen.percents,
+        valueWei: amtWei,
+        variantName: chosen.variant
+      });
+
+      log(`Split tx sent: ${tx.hash}`);
+      await tx.wait();
+      log("Split confirmed ✅");
+      await refreshTelemetry();
     }
 
-    log("ZEPHENHEL CITADEL ready. If execute fails, the log will show every attempted mode + gas settings.");
+  }catch(e){
+    const m = humanErr(e);
+    showError(`Split failed: ${m}`);
+    log(`Split failed: ${m}`);
   }
+});
 
-  wire();
+function humanErr(e){
+  const msg =
+    e?.error?.message ||
+    e?.data?.message ||
+    e?.reason ||
+    e?.message ||
+    String(e);
+
+  // common MetaMask message cleanup
+  if (msg.includes("UNPREDICTABLE_GAS_LIMIT")) return "Cannot estimate gas (likely revert). Check percent scale / fee / rules.";
+  if (msg.includes("execution reverted")) return msg;
+  if (msg.includes("Internal JSON-RPC error")) return "Internal JSON-RPC error (often revert). Preflight passed? If yes, try again or increase gas.";
+  return msg;
+}
+
+// ====== Vault: ABI-driven loader (so it can work with YOUR exact contract) ======
+btnLoadVault.addEventListener("click", async () => {
+  clearVaultError();
+  try{
+    if (!signer || !userAddr) throw new Error("Connect wallet first.");
+    const vAddr = vaultAddress.value.trim();
+    if (!validAddress(vAddr)) throw new Error("Invalid vault address.");
+
+    let abi;
+    try{
+      abi = JSON.parse(vaultAbi.value.trim());
+      if (!Array.isArray(abi)) throw new Error("ABI must be a JSON array.");
+    }catch{
+      throw new Error("Paste a valid ABI JSON array.");
+    }
+
+    const vault = new ethers.Contract(vAddr, abi, signer);
+    vaultActions.innerHTML = "";
+
+    // detect some common function names and build quick buttons
+    const fns = abi.filter(x => x.type === "function").map(x => x.name);
+    vLog(`Vault ABI loaded. Detected ${fns.length} functions.`);
+
+    // Build a simple “function caller” dropdown for anything
+    const wrap = document.createElement("div");
+    wrap.className = "statbox";
+
+    const selLabel = document.createElement("div");
+    selLabel.className = "label";
+    selLabel.textContent = "Call a function";
+
+    const sel = document.createElement("select");
+    const opt0 = document.createElement("option");
+    opt0.value = "";
+    opt0.textContent = "Select function…";
+    sel.appendChild(opt0);
+
+    for (const fn of fns){
+      const o = document.createElement("option");
+      o.value = fn;
+      o.textContent = fn;
+      sel.appendChild(o);
+    }
+
+    const argsLabel = document.createElement("div");
+    argsLabel.className = "label";
+    argsLabel.style.marginTop = "10px";
+    argsLabel.textContent = "Args (JSON array)";
+
+    const args = document.createElement("textarea");
+    args.rows = 3;
+    args.placeholder = `[ ] or ["0x...", 30]`;
+
+    const btnRead = document.createElement("button");
+    btnRead.className = "btn ghost";
+    btnRead.textContent = "Call (read)";
+
+    const btnWrite = document.createElement("button");
+    btnWrite.className = "btn gold";
+    btnWrite.textContent = "Send (write)";
+
+    const row = document.createElement("div");
+    row.className = "actions";
+    row.style.marginTop = "10px";
+    row.appendChild(btnRead);
+    row.appendChild(btnWrite);
+
+    wrap.appendChild(selLabel);
+    wrap.appendChild(sel);
+    wrap.appendChild(argsLabel);
+    wrap.appendChild(args);
+    wrap.appendChild(row);
+    vaultActions.appendChild(wrap);
+
+    btnRead.addEventListener("click", async () => {
+      clearVaultError();
+      try{
+        const fn = sel.value;
+        if (!fn) throw new Error("Select a function.");
+        const a = JSON.parse(args.value || "[]");
+        vLog(`read ${fn}(${JSON.stringify(a)})`);
+        const out = await vault[fn](...a);
+        vLog(`→ ${stringifyOut(out)}`);
+      }catch(e){
+        showVaultError(humanErr(e));
+        vLog(`read failed: ${humanErr(e)}`);
+      }
+    });
+
+    btnWrite.addEventListener("click", async () => {
+      clearVaultError();
+      try{
+        const fn = sel.value;
+        if (!fn) throw new Error("Select a function.");
+        const a = JSON.parse(args.value || "[]");
+        vLog(`write ${fn}(${JSON.stringify(a)})`);
+        const tx = await vault[fn](...a);
+        vLog(`tx: ${tx.hash}`);
+        await tx.wait();
+        vLog(`confirmed ✅`);
+      }catch(e){
+        showVaultError(humanErr(e));
+        vLog(`write failed: ${humanErr(e)}`);
+      }
+    });
+
+  }catch(e){
+    showVaultError(humanErr(e));
+  }
+});
+
+function stringifyOut(out){
+  try{
+    if (out?._isBigNumber) return out.toString();
+    if (Array.isArray(out)) return JSON.stringify(out.map(x => x?._isBigNumber ? x.toString() : x));
+    if (typeof out === "object") {
+      const c = {};
+      for (const k of Object.keys(out)) {
+        const v = out[k];
+        c[k] = v?._isBigNumber ? v.toString() : v;
+      }
+      return JSON.stringify(c);
+    }
+    return String(out);
+  }catch{
+    return String(out);
+  }
+}
+
+// ====== Boot ======
+btnLoadVault.disabled = true;
+setConnectedUI(false);
+ensureRecipientsMin();
+validateAll();
+
+// Enable vault loader after connect
+(function init(){
+  if (!window.ethereum) {
+    showError("MetaMask not detected. Install MetaMask extension (Edge) and refresh.");
+    return;
+  }
+  // try to show chain if already available (without requesting)
+  provider = new ethers.providers.Web3Provider(window.ethereum, "any");
+  provider.getNetwork().then(n => {
+    chainId = n.chainId;
+    pillNet.textContent = `Network: ${CHAINS[chainId]?.name || ("chainId "+chainId)}`;
+  }).catch(()=>{});
 })();
+
+// enable vault load button when connected & address exists
+setInterval(() => {
+  btnLoadVault.disabled = !(signer && userAddr && validAddress(vaultAddress.value.trim()));
+}, 500);
