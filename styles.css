@@ -2,7 +2,7 @@
   --bg:#050509;
   --panel:#0b0a10;
   --line:rgba(255,210,90,.18);
-  --line2:rgba(255,255,255,.06);
+  --line2:rgba(255,255,255,.07);
   --gold:#f2c14e;
   --gold2:#ffdf92;
   --text:#e9e7ef;
@@ -17,9 +17,9 @@ body{
   margin:0;
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   color:var(--text);
-  background: radial-gradient(1000px 500px at 50% 0%, rgba(242,193,78,.10), transparent 60%),
-              radial-gradient(700px 400px at 12% 70%, rgba(255,223,146,.05), transparent 70%),
-              radial-gradient(700px 400px at 88% 70%, rgba(255,223,146,.03), transparent 70%),
+  background: radial-gradient(1000px 520px at 50% 0%, rgba(242,193,78,.12), transparent 60%),
+              radial-gradient(700px 420px at 12% 70%, rgba(255,223,146,.06), transparent 70%),
+              radial-gradient(700px 420px at 88% 70%, rgba(255,223,146,.04), transparent 70%),
               var(--bg);
 }
 
@@ -34,7 +34,7 @@ body{
   position:sticky; top:0; z-index:5;
   display:flex; align-items:center; justify-content:space-between; gap:12px;
   padding:14px 16px;
-  background: rgba(5,5,9,.72);
+  background: rgba(5,5,9,.76);
   backdrop-filter: blur(10px);
   border-bottom:1px solid var(--line2);
 }
@@ -45,7 +45,7 @@ body{
   display:grid; place-items:center;
   border:1px solid rgba(242,193,78,.35);
   background: linear-gradient(145deg, rgba(242,193,78,.20), rgba(255,255,255,.04));
-  box-shadow: 0 0 20px rgba(242,193,78,.16), var(--shadow);
+  box-shadow: 0 0 22px rgba(242,193,78,.16), var(--shadow);
   font-family: Cinzel, serif;
   color: var(--gold2);
   font-size:20px;
@@ -78,14 +78,31 @@ body{
 }
 .chip b{color:var(--text); font-weight:800}
 
-.wrap{max-width:960px; margin:0 auto; padding:18px 14px 34px;}
+.wrap{max-width:1180px; margin:0 auto; padding:18px 14px 34px;}
+.grid{
+  display:grid;
+  grid-template-columns: 1fr 380px;
+  gap:14px;
+}
+@media (max-width: 980px){
+  .grid{grid-template-columns:1fr;}
+}
 
 .console{
-  background: rgba(11,10,16,.70);
+  background: rgba(11,10,16,.72);
   border:1px solid var(--line);
   border-radius:18px;
   box-shadow: var(--shadow);
   padding:14px;
+}
+.panelTitle{
+  font-family: Cinzel, serif;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--gold2);
+  font-size:12px;
+  margin-bottom:10px;
+  opacity:.95;
 }
 
 .row{display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end}
@@ -123,6 +140,7 @@ input:focus{
   gap:10px;
   align-items:center;
   flex-wrap:wrap;
+  line-height:1.35;
 }
 .tiny{
   font-size:10px;
@@ -144,7 +162,7 @@ input:focus{
 }
 .btn:hover{border-color: rgba(242,193,78,.30)}
 .btn.gold{
-  background: linear-gradient(145deg, rgba(242,193,78,.22), rgba(255,223,146,.10));
+  background: linear-gradient(145deg, rgba(242,193,78,.24), rgba(255,223,146,.10));
   border-color: rgba(242,193,78,.45);
   box-shadow: 0 0 18px rgba(242,193,78,.12);
 }
@@ -162,7 +180,6 @@ input:focus{
 .h2 b{color:var(--text)}
 
 .list{margin-top:10px; display:flex; flex-direction:column; gap:10px}
-
 .item{
   display:grid;
   grid-template-columns: 1fr 120px 88px;
@@ -173,15 +190,12 @@ input:focus{
   border:1px solid rgba(255,255,255,.06);
   background: rgba(0,0,0,.18);
 }
-@media (max-width: 760px){
-  .item{grid-template-columns:1fr;}
-}
-
+@media (max-width: 760px){ .item{grid-template-columns:1fr;} }
 .item .miniLabel{font-size:11px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; margin-bottom:6px}
 .item input{padding:10px 10px; border-radius:12px}
 
 .actions{margin-top:12px; justify-content:flex-end}
-.actions .btn{min-width:180px}
+.actions .btn{min-width:190px}
 
 .warn{
   margin-top:12px;
@@ -211,3 +225,17 @@ pre{
   overflow:auto;
   white-space:pre-wrap;
 }
+
+.sidePanel{height: fit-content;}
+.log{
+  height:260px;
+  overflow:auto;
+  padding:10px;
+  border-radius:16px;
+  border:1px solid rgba(242,193,78,.14);
+  background: rgba(0,0,0,.22);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size:11px;
+  color: rgba(233,231,239,.92);
+}
+.divider{height:1px; background: var(--line2); margin:12px 0;}
