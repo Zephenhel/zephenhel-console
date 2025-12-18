@@ -5,167 +5,87 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>ZEPHENHEL CITADEL</title>
 
-  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="./styles.css" />
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <script defer src="./app.js"></script>
 </head>
 
 <body>
-  <div class="bg-ornaments"></div>
+  <div class="bg"></div>
 
-  <header class="topbar">
+  <header class="top">
     <div class="brand">
-      <div class="sigil"></div>
+      <div class="mark">✠</div>
       <div class="brandtext">
         <div class="title">ZEPHENHEL <span class="gold">CITADEL</span></div>
-        <div class="subtitle">Distribution Command • Token Routing • Proof-of-Outcome</div>
+        <div class="sub">Distribution Command</div>
       </div>
     </div>
 
-    <div class="top-actions">
-      <div class="pill" id="networkPill">Network: <b>—</b></div>
-      <div class="pill" id="accountPill">Wallet: <b>Disconnected</b></div>
-      <button class="btn gold" id="connectBtn">CONNECT WALLET</button>
-      <button class="btn outline" id="switchBscBtn" title="Switch to BSC">SWITCH TO BSC</button>
+    <div class="right">
+      <div class="chip" id="netChip">BSC: <b>—</b></div>
+      <div class="chip" id="acctChip">WALLET: <b>DISCONNECTED</b></div>
+      <button class="btn gold" id="connectBtn">CONNECT</button>
+      <button class="btn" id="switchBtn" title="Switch to BSC">SWITCH</button>
     </div>
   </header>
 
-  <main class="grid">
-    <!-- Left: Operations -->
-    <section class="panel">
-      <div class="panel-head">
-        <div class="panel-title">COMMAND DECK</div>
-        <div class="panel-tag">OPERATOR MODE</div>
-      </div>
-
-      <div class="block">
-        <div class="label">Splitter Contract (BSC)</div>
-        <input id="splitterAddress" class="input" placeholder="0x... (your splitter contract address)" />
-        <div class="hint">Tip: this is the deployed splitter contract your UI calls.</div>
-      </div>
-
-      <div class="block">
-        <div class="label">Token Contract (BEP20)</div>
-        <input id="tokenAddress" class="input" placeholder="0x... token address" />
-        <div class="row">
-          <div class="stat">
-            <div class="stat-k">Token</div>
-            <div class="stat-v" id="tokenSymbol">—</div>
-          </div>
-          <div class="stat">
-            <div class="stat-k">Decimals</div>
-            <div class="stat-v" id="tokenDecimals">—</div>
-          </div>
-          <div class="stat">
-            <div class="stat-k">Price</div>
-            <div class="stat-v" id="tokenPriceUsd">—</div>
-          </div>
+  <main class="wrap">
+    <section class="console">
+      <div class="row">
+        <div class="field">
+          <label>SPLITTER (BSC)</label>
+          <input id="splitter" placeholder="0x..." spellcheck="false" />
         </div>
-        <div class="hint" id="dexHint">Price feed: Dexscreener (best effort).</div>
       </div>
 
-      <div class="block">
-        <div class="label">Amount (token units)</div>
-        <input id="amount" class="input" placeholder="e.g. 1500" inputmode="decimal" />
-        <div class="row">
-          <div class="stat wide">
-            <div class="stat-k">USD Estimate</div>
-            <div class="stat-v gold" id="usdEstimate">—</div>
-          </div>
-          <div class="stat wide">
-            <div class="stat-k">Fee</div>
-            <div class="stat-v">
-              <span class="micro">platform fee: 1%</span>
-            </div>
+      <div class="row two">
+        <div class="field">
+          <label>TOKEN ADDRESS</label>
+          <input id="token" placeholder="0x..." spellcheck="false" />
+          <div class="micro" id="tokenMeta">Token: — • Decimals: — • Price: —</div>
+        </div>
+
+        <div class="field">
+          <label>AMOUNT</label>
+          <input id="amount" placeholder="0.0" inputmode="decimal" />
+          <div class="micro">
+            ≈ <span class="gold" id="usd">$—</span>
+            <span class="tiny">platform fee: 1%</span>
           </div>
         </div>
       </div>
 
-      <div class="block">
-        <div class="label">Recipients (Formation)</div>
-
-        <div class="formation-head">
-          <div class="formation-total">
-            Total: <b id="totalPct">0%</b>
-            <span class="micro">must equal 100%</span>
-          </div>
-          <div class="formation-tools">
-            <button class="btn mini outline" id="equalizeBtn">EQUALIZE</button>
-            <button class="btn mini outline" id="clearBtn">CLEAR</button>
-            <button class="btn mini gold" id="addRecipientBtn">+ ADD</button>
-          </div>
-        </div>
-
-        <div id="recipientsList" class="recipients"></div>
-
-        <div class="actions">
-          <button class="btn big outline" id="approveBtn">APPROVE</button>
-          <button class="btn big gold" id="splitBtn">EXECUTE SPLIT</button>
-        </div>
-
-        <div class="warn" id="warnBox" hidden></div>
-      </div>
-
-      <div class="block subtle">
-        <div class="micro">
-          Citadel Safety: This UI only prepares transactions in your wallet. Always verify token + contract before signing.
-        </div>
-      </div>
-    </section>
-
-    <!-- Right: Telemetry -->
-    <section class="panel">
-      <div class="panel-head">
-        <div class="panel-title">TELEMETRY</div>
-        <div class="panel-tag">TACTICAL READOUT</div>
-      </div>
-
-      <div class="telemetry">
-        <div class="tele-card">
-          <div class="tele-k">Allowance</div>
-          <div class="tele-v" id="allowanceReadout">—</div>
-          <div class="micro">How much the splitter can spend</div>
-        </div>
-
-        <div class="tele-card">
-          <div class="tele-k">Balance</div>
-          <div class="tele-v" id="balanceReadout">—</div>
-          <div class="micro">Your token balance (connected wallet)</div>
-        </div>
-
-        <div class="tele-card">
-          <div class="tele-k">Dex Intel</div>
-          <div class="tele-v" id="dexReadout">—</div>
-          <div class="micro">Liquidity / 24h volume (best effort)</div>
+      <div class="row head">
+        <div class="h">RECIPIENTS</div>
+        <div class="h2">
+          Total: <b id="total">0%</b>
+          <button class="btn mini" id="addBtn">+ ADD</button>
         </div>
       </div>
 
-      <div class="block">
-        <div class="label">Proof-of-Outcome Receipt</div>
-        <div class="receipt" id="receiptBox">
-          <div class="micro">No receipt yet. Execute a split to generate one.</div>
-        </div>
-        <div class="row">
-          <button class="btn mini outline" id="copyReceiptBtn">COPY RECEIPT</button>
-          <a class="btn mini outline" id="txLink" href="#" target="_blank" rel="noreferrer" style="display:none;">VIEW TX</a>
-        </div>
+      <div id="list" class="list"></div>
+
+      <div class="row actions">
+        <button class="btn" id="approveBtn">APPROVE</button>
+        <button class="btn gold" id="splitBtn">EXECUTE SPLIT</button>
       </div>
 
-      <div class="block">
-        <div class="label">Runtime Log</div>
-        <pre class="log" id="log"></pre>
-      </div>
+      <div id="warn" class="warn" hidden></div>
 
-      <footer class="footer">
-        <div class="micro">Zephenhel © Tactical Financial Infrastructure — Citadel Build</div>
-      </footer>
+      <div class="receipt" id="receipt" hidden>
+        <div class="receiptHead">
+          <div class="h">RECEIPT</div>
+          <a id="txLink" class="btn mini" href="#" target="_blank" rel="noreferrer" style="display:none;">VIEW TX</a>
+        </div>
+        <pre id="receiptText"></pre>
+        <button class="btn mini" id="copyBtn">COPY RECEIPT</button>
+      </div>
     </section>
   </main>
-
-  <script src="./app.js"></script>
 </body>
 </html>
