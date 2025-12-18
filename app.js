@@ -1,586 +1,576 @@
-/* Zephenhel Console — GitHub Pages friendly
-   - BSC network check + switch
-   - ERC-20 multi-transfer splitter OR native BNB splitter
-   - 1% platform fee
-   - Dexscreener USD price + value estimate
+/* ZEPHENHEL CITADEL — GitHub Pages / Static Build
+   - Metamask connect + BSC switch
+   - Token intel (symbol/decimals), balance, allowance
+   - Dexscreener USD estimate (best effort)
+   - Formation recipients add/remove, total % must equal 100
+   - Approve + Execute Split using your splitter contract
 */
 
-const BSC_CHAIN_ID_HEX = "0x38";
-const BSC_CHAIN_ID_DEC = 56;
+const { ethers } = window.ethers;
 
-const FEE_BPS = 100; // 1% = 100 basis points
-const FEE_WALLET = "0x0000000000000000000000000000000000000000"; // <<< REPLACE THIS
-
-// Minimal ERC20 ABI
-const ERC20_ABI = [
-  { "constant": true, "inputs": [], "name": "symbol", "outputs": [{ "name": "", "type": "string" }], "type": "function" },
-  { "constant": true, "inputs": [], "name": "decimals", "outputs": [{ "name": "", "type": "uint8" }], "type": "function" },
-  { "constant": false, "inputs": [{ "name": "to", "type": "address" }, { "name": "amount", "type": "uint256" }], "name": "transfer", "outputs": [{ "name": "", "type": "bool" }], "type": "function" },
-];
-
-const $ = (id) => document.getElementById(id);
-
-let provider = null;
-let signer = null;
-let walletAddress = null;
-let currentChainId = null;
-
-let loadedToken = {
-  address: "",
-  symbol: "",
-  decimals: null,
-  priceUsd: null
+const BSC_CHAIN_ID_HEX = "0x38"; // 56
+const BSC_PARAMS = {
+  chainId: BSC_CHAIN_ID_HEX,
+  chainName: "BNB Smart Chain",
+  nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
+  rpcUrls: ["https://bsc-dataseed.binance.org/"],
+  blockExplorerUrls: ["https://bscscan.com/"],
 };
 
-function setStatus(msg, isError=false) {
-  const el = $("statusText");
-  el.textContent = msg;
-  el.classList.toggle("muted", !isError);
-  el.style.color = isError ? "var(--danger)" : "";
+const ERC20_ABI = [
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
+  "function balanceOf(address) view returns (uint256)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+];
+
+const SPLITTER_ABI = [
+  // IMPORTANT: This must match your deployed splitter contract function name/signature.
+  // If yours differs, tell me the exact function name + parameters and I’ll match it.
+  "function splitToken(address token, uint256 amount, address[] recipients, uint256[] bps) external",
+];
+
+const el = (id) => document.getElementById(id);
+
+const state = {
+  provider: null,
+  signer: null,
+  account: null,
+  chainId: null,
+
+  token: {
+    address: "",
+    symbol: "",
+    decimals: 18,
+    priceUsd: null,
+    dex: null,
+  },
+
+  splitterAddress: "",
+  recipients: [],
+  lastReceiptText: "",
+  lastTxUrl: "",
+};
+
+function log(msg) {
+  const line = `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+  el("log").textContent = line + el("log").textContent;
 }
 
-function fmt(n, d=6) {
-  if (n === null || n === undefined || Number.isNaN(n)) return "—";
-  return Number(n).toLocaleString(undefined, { maximumFractionDigits: d });
-}
-
-function parseFloatSafe(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
-function isAddressLike(s) {
-  return typeof s === "string" && /^0x[a-fA-F0-9]{40}$/.test(s.trim());
-}
-
-/* ---------- UI: recipients ---------- */
-
-function recipientsFromUI() {
-  const rows = [...document.querySelectorAll(".recRow")];
-  return rows.map((row) => {
-    const addr = row.querySelector(".addrInput").value.trim();
-    const pct = parseFloatSafe(row.querySelector(".pctInput").value);
-    return { address: addr, pct: pct ?? 0 };
-  });
-}
-
-function updatePctTotal() {
-  const recs = recipientsFromUI();
-  const total = recs.reduce((a, r) => a + (Number(r.pct) || 0), 0);
-  $("pctTotal").textContent = `${fmt(total, 4)}%`;
-  return total;
-}
-
-function addRecipientRow(addr="", pct="") {
-  const wrap = $("recipientsList");
-  const row = document.createElement("div");
-  row.className = "recRow";
-  row.innerHTML = `
-    <input class="addrInput" placeholder="Recipient 0x..." spellcheck="false" value="${addr}" />
-    <input class="pctInput" placeholder="%" inputmode="decimal" value="${pct}" />
-    <button class="iconBtn" title="Remove">×</button>
-  `;
-  row.querySelector(".iconBtn").onclick = () => {
-    row.remove();
-    updatePctTotal();
-    updateSummary();
-  };
-  row.querySelector(".addrInput").addEventListener("input", () => {
-    updateSummary();
-  });
-  row.querySelector(".pctInput").addEventListener("input", () => {
-    updatePctTotal();
-    updateSummary();
-  });
-  wrap.appendChild(row);
-  updatePctTotal();
-  updateSummary();
-}
-
-function normalizeTo100() {
-  const recs = recipientsFromUI();
-  if (recs.length === 0) return;
-  const total = recs.reduce((a, r) => a + (Number(r.pct) || 0), 0);
-  if (total <= 0) {
-    const even = 100 / recs.length;
-    document.querySelectorAll(".pctInput").forEach((el) => el.value = fmt(even, 6));
-  } else {
-    document.querySelectorAll(".recRow").forEach((row, i) => {
-      const pctEl = row.querySelector(".pctInput");
-      const pct = Number(recs[i].pct) || 0;
-      pctEl.value = fmt((pct / total) * 100, 6);
-    });
-  }
-  updatePctTotal();
-  updateSummary();
-}
-
-/* ---------- Network + wallet ---------- */
-
-async function detectNetwork() {
-  if (!window.ethereum) return null;
-  const chainIdHex = await window.ethereum.request({ method: "eth_chainId" });
-  currentChainId = parseInt(chainIdHex, 16);
-  $("networkPill").innerHTML = `Network: <b>${currentChainId === BSC_CHAIN_ID_DEC ? "BSC" : "Unknown ("+currentChainId+")"}</b>`;
-  return currentChainId;
-}
-
-async function connectWallet() {
-  if (!window.ethereum) {
-    setStatus("MetaMask not detected. Install MetaMask, then refresh.", true);
+function setWarn(text) {
+  const box = el("warnBox");
+  if (!text) {
+    box.hidden = true;
+    box.textContent = "";
     return;
   }
-  try {
-    await window.ethereum.request({ method: "eth_requestAccounts" });
-    await detectNetwork();
-
-    // Ethers v5 is not guaranteed on pages; use window.ethereum directly
-    // We'll do raw RPC signing via MetaMask for txs (no ethers dependency)
-    const accounts = await window.ethereum.request({ method: "eth_accounts" });
-    walletAddress = accounts?.[0] || null;
-
-    $("walletPill").innerHTML = `Wallet: <b>${walletAddress ? walletAddress.slice(0,6)+"…"+walletAddress.slice(-4) : "Disconnected"}</b>`;
-    setStatus("Wallet connected. Ready.");
-
-    // refresh price/value display
-    await refreshPriceAndValue();
-  } catch (e) {
-    setStatus(`Connect failed: ${e?.message || e}`, true);
-  }
+  box.hidden = false;
+  box.textContent = text;
 }
 
-async function switchToBSC() {
-  if (!window.ethereum) return;
+function shortAddr(a) {
+  if (!a || a.length < 10) return a || "—";
+  return `${a.slice(0, 6)}…${a.slice(-4)}`;
+}
+
+function isAddress(a) {
+  try { return ethers.utils.isAddress(a); } catch { return false; }
+}
+
+function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
+
+function normalizeAmountInput(v) {
+  // allow decimals in UI; we’ll parse with token decimals later
+  return (v || "").toString().trim();
+}
+
+function pctTotal() {
+  const sum = state.recipients.reduce((acc, r) => acc + (Number(r.pct) || 0), 0);
+  return sum;
+}
+
+function renderTotalPct() {
+  const t = pctTotal();
+  el("totalPct").textContent = `${t}%`;
+}
+
+function addRecipient(addr = "", pct = "") {
+  state.recipients.push({ addr, pct });
+  renderRecipients();
+}
+
+function removeRecipient(i) {
+  state.recipients.splice(i, 1);
+  renderRecipients();
+}
+
+function renderRecipients() {
+  const list = el("recipientsList");
+  list.innerHTML = "";
+
+  state.recipients.forEach((r, idx) => {
+    const tile = document.createElement("div");
+    tile.className = "tile";
+
+    const addrWrap = document.createElement("div");
+    addrWrap.className = "addr";
+    const addrInput = document.createElement("input");
+    addrInput.className = "smallinput";
+    addrInput.placeholder = "Recipient address (0x...)";
+    addrInput.value = r.addr;
+    addrInput.addEventListener("input", (e) => {
+      state.recipients[idx].addr = e.target.value.trim();
+    });
+
+    const addrBadge = document.createElement("div");
+    addrBadge.className = "badge";
+    addrBadge.textContent = isAddress(r.addr) ? "VALID" : "CHECK ADDRESS";
+
+    addrInput.addEventListener("input", () => {
+      addrBadge.textContent = isAddress(addrInput.value.trim()) ? "VALID" : "CHECK ADDRESS";
+    });
+
+    addrWrap.appendChild(addrInput);
+    addrWrap.appendChild(addrBadge);
+
+    const pctWrap = document.createElement("div");
+    pctWrap.className = "pct";
+    const pctInput = document.createElement("input");
+    pctInput.className = "smallinput";
+    pctInput.placeholder = "Percent";
+    pctInput.inputMode = "numeric";
+    pctInput.value = r.pct;
+    pctInput.addEventListener("input", (e) => {
+      const v = e.target.value.replace(/[^\d]/g, "");
+      const n = clamp(Number(v || 0), 0, 100);
+      e.target.value = v === "" ? "" : String(n);
+      state.recipients[idx].pct = e.target.value;
+      renderTotalPct();
+    });
+
+    const pctBadge = document.createElement("div");
+    pctBadge.className = "badge";
+    pctBadge.textContent = "WEIGHT";
+
+    pctWrap.appendChild(pctInput);
+    pctWrap.appendChild(pctBadge);
+
+    const tools = document.createElement("div");
+    tools.className = "tools";
+    const rm = document.createElement("button");
+    rm.className = "btn mini outline";
+    rm.textContent = "REMOVE";
+    rm.addEventListener("click", () => removeRecipient(idx));
+
+    tools.appendChild(rm);
+
+    tile.appendChild(addrWrap);
+    tile.appendChild(pctWrap);
+    tile.appendChild(tools);
+
+    list.appendChild(tile);
+  });
+
+  renderTotalPct();
+}
+
+function equalize() {
+  if (state.recipients.length === 0) return;
+  const n = state.recipients.length;
+  const base = Math.floor(100 / n);
+  let rem = 100 - base * n;
+
+  state.recipients = state.recipients.map((r, i) => {
+    const add = rem > 0 ? 1 : 0;
+    if (rem > 0) rem -= 1;
+    return { ...r, pct: String(base + add) };
+  });
+  renderRecipients();
+}
+
+function clearRecipients() {
+  state.recipients = [];
+  renderRecipients();
+}
+
+async function ensureBsc() {
+  if (!window.ethereum) throw new Error("MetaMask not found.");
+  const chainId = await window.ethereum.request({ method: "eth_chainId" });
+  state.chainId = chainId;
+
+  if (chainId === BSC_CHAIN_ID_HEX) return true;
+
   try {
     await window.ethereum.request({
       method: "wallet_switchEthereumChain",
       params: [{ chainId: BSC_CHAIN_ID_HEX }],
     });
-    await detectNetwork();
-    setStatus("Switched to BSC.");
-    await refreshPriceAndValue();
-  } catch (e) {
-    setStatus(`Switch failed: ${e?.message || e}`, true);
+  } catch (err) {
+    // If chain not added
+    if (err && (err.code === 4902 || err.code === -32603)) {
+      await window.ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: [BSC_PARAMS],
+      });
+    } else {
+      throw err;
+    }
   }
+  return true;
 }
 
-// “Disconnect” on web is basically UI reset (MetaMask controls actual connection)
-function disconnectUI() {
-  walletAddress = null;
-  $("walletPill").innerHTML = `Wallet: <b>Disconnected</b>`;
-  setStatus("Disconnected (UI). Click CONNECT WALLET to reconnect.");
-}
+async function connect() {
+  setWarn("");
+  if (!window.ethereum) {
+    setWarn("MetaMask not detected. Install MetaMask extension and refresh.");
+    return;
+  }
 
-/* ---------- ERC-20 helpers (raw eth_call + sendTransaction) ---------- */
+  await ensureBsc();
 
-async function ethCall(to, data) {
-  return await window.ethereum.request({
-    method: "eth_call",
-    params: [{ to, data }, "latest"],
-  });
-}
+  state.provider = new ethers.providers.Web3Provider(window.ethereum, "any");
+  await state.provider.send("eth_requestAccounts", []);
+  state.signer = state.provider.getSigner();
+  state.account = await state.signer.getAddress();
 
-function toHex(n) {
-  return "0x" + BigInt(n).toString(16);
-}
+  const net = await state.provider.getNetwork();
+  state.chainId = "0x" + net.chainId.toString(16);
 
-function pad32(hexNo0x) {
-  return hexNo0x.padStart(64, "0");
-}
-
-function encodeAddress(addr) {
-  return pad32(addr.toLowerCase().replace(/^0x/, ""));
-}
-
-function encodeUint256(bi) {
-  return pad32(BigInt(bi).toString(16));
-}
-
-// keccak256 selectors hardcoded for symbol(), decimals(), transfer(address,uint256)
-const SEL_SYMBOL = "0x95d89b41";
-const SEL_DECIMALS = "0x313ce567";
-const SEL_TRANSFER = "0xa9059cbb";
-
-function hexToUtf8(hex) {
-  // best effort for symbol strings
-  try {
-    hex = hex.replace(/^0x/, "");
-    const bytes = [];
-    for (let i=0;i<hex.length;i+=2) bytes.push(parseInt(hex.slice(i,i+2),16));
-    const str = new TextDecoder().decode(new Uint8Array(bytes));
-    return str.replace(/\u0000/g, "").trim();
-  } catch { return ""; }
+  el("accountPill").innerHTML = `Wallet: <b>${shortAddr(state.account)}</b>`;
+  el("networkPill").innerHTML = `Network: <b>${net.chainId === 56 ? "BSC" : net.chainId}</b>`;
+  log(`Wallet connected: ${state.account}`);
 }
 
 async function loadTokenMeta() {
-  const addr = $("tokenAddress").value.trim();
-  if (!isAddressLike(addr)) {
-    setStatus("Enter a valid ERC-20 token address (0x...).", true);
+  setWarn("");
+  const tokenAddr = el("tokenAddress").value.trim();
+  state.token.address = tokenAddr;
+
+  if (!isAddress(tokenAddr)) {
+    el("tokenSymbol").textContent = "—";
+    el("tokenDecimals").textContent = "—";
+    el("tokenPriceUsd").textContent = "—";
+    el("usdEstimate").textContent = "—";
+    el("dexReadout").textContent = "—";
     return;
   }
+
   try {
-    if (currentChainId !== BSC_CHAIN_ID_DEC) {
-      setStatus("Please switch to BSC first.", true);
-      return;
+    const token = new ethers.Contract(tokenAddr, ERC20_ABI, state.provider || new ethers.providers.JsonRpcProvider(BSC_PARAMS.rpcUrls[0]));
+    const [sym, dec] = await Promise.all([token.symbol(), token.decimals()]);
+    state.token.symbol = sym;
+    state.token.decimals = Number(dec);
+
+    el("tokenSymbol").textContent = sym;
+    el("tokenDecimals").textContent = String(dec);
+    log(`Token meta: ${sym} / decimals ${dec}`);
+
+    await refreshDexscreener(tokenAddr);
+    if (state.account && state.provider) {
+      await refreshBalanceAndAllowance();
     }
-
-    // decimals
-    const decHex = await ethCall(addr, SEL_DECIMALS);
-    const dec = parseInt(decHex, 16);
-
-    // symbol (could be bytes32 or string; we try string decode)
-    const symHex = await ethCall(addr, SEL_SYMBOL);
-    let sym = "";
-    // If it's returned as a string ABI, it contains offset/length; we’ll attempt to parse length at word 2.
-    const clean = symHex.replace(/^0x/, "");
-    if (clean.length >= 128) {
-      const len = parseInt(clean.slice(64, 128), 16);
-      const dataStart = 128;
-      const dataHex = "0x" + clean.slice(dataStart, dataStart + len*2);
-      sym = hexToUtf8(dataHex) || "";
-    } else {
-      sym = hexToUtf8(symHex) || "";
-    }
-
-    loadedToken.address = addr;
-    loadedToken.decimals = Number.isFinite(dec) ? dec : 18;
-    loadedToken.symbol = sym || "TOKEN";
-
-    $("tokenDecimals").value = String(loadedToken.decimals);
-    $("tokenSymbol").value = loadedToken.symbol;
-
-    setStatus(`Loaded token: ${loadedToken.symbol} (decimals ${loadedToken.decimals}).`);
-    await refreshPriceAndValue();
+    updateUsdEstimate();
   } catch (e) {
-    setStatus(`Token load failed: ${e?.message || e}`, true);
+    log(`Token meta error: ${e.message || e}`);
+    setWarn("Could not read token metadata. Check the token address (BEP20) and network (BSC).");
   }
 }
 
-function amountToBaseUnits(amountFloat, decimals) {
-  // Convert decimal string/float to integer base units safely using BigInt
-  const s = String(amountFloat).trim();
-  if (!s || s === ".") throw new Error("Invalid amount");
-  const [a,b=""] = s.split(".");
-  const whole = BigInt(a || "0");
-  const frac = (b + "0".repeat(decimals)).slice(0, decimals);
-  const fracBi = BigInt(frac || "0");
-  return whole * (10n ** BigInt(decimals)) + fracBi;
-}
-
-function baseUnitsToAmountStr(units, decimals) {
-  const bi = BigInt(units);
-  const base = 10n ** BigInt(decimals);
-  const whole = bi / base;
-  const frac = bi % base;
-  const fracStr = frac.toString().padStart(decimals, "0").replace(/0+$/,"");
-  return fracStr ? `${whole.toString()}.${fracStr}` : whole.toString();
-}
-
-/* ---------- Dexscreener price ---------- */
-
-async function fetchDexscreenerPriceUsd(tokenAddr) {
+async function refreshDexscreener(tokenAddr) {
   try {
+    el("dexHint").textContent = "Price feed: Dexscreener (loading...)";
     const url = `https://api.dexscreener.com/latest/dex/tokens/${tokenAddr}`;
-    const r = await fetch(url, { cache: "no-store" });
-    if (!r.ok) return null;
-    const j = await r.json();
-    const pairs = j?.pairs;
-    if (!pairs || !pairs.length) return null;
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error(`Dexscreener HTTP ${res.status}`);
+    const data = await res.json();
 
-    // Prefer BSC pairs if available
-    const bscPair = pairs.find(p => (p?.chainId || "").toLowerCase() === "bsc") || pairs[0];
-    const price = bscPair?.priceUsd;
-    const n = Number(price);
-    return Number.isFinite(n) ? n : null;
-  } catch {
-    return null;
-  }
-}
+    const pairs = Array.isArray(data?.pairs) ? data.pairs : [];
+    // Choose best BSC pair by liquidity (USD)
+    const bscPairs = pairs.filter(p => (p.chainId || "").toLowerCase() === "bsc");
+    bscPairs.sort((a,b) => (Number(b?.liquidity?.usd||0) - Number(a?.liquidity?.usd||0)));
+    const best = bscPairs[0] || pairs[0];
 
-async function refreshPriceAndValue() {
-  const mode = $("modeSelect").value;
-  const amount = parseFloatSafe($("amountInput").value);
-
-  let price = null;
-
-  if (mode === "erc20") {
-    const tokenAddr = $("tokenAddress").value.trim();
-    if (isAddressLike(tokenAddr)) {
-      price = await fetchDexscreenerPriceUsd(tokenAddr);
-    }
-  } else {
-    // BNB mode: you *can* wire a BNB USD source later; for now show —
-    price = null;
-  }
-
-  loadedToken.priceUsd = price;
-  $("priceUsd").textContent = price ? `$${fmt(price, 6)}` : "$—";
-
-  if (price && amount !== null) {
-    $("valueUsd").textContent = `$${fmt(price * amount, 2)}`;
-  } else {
-    $("valueUsd").textContent = "$—";
-  }
-
-  updateSummary();
-}
-
-/* ---------- Preview + execute ---------- */
-
-function computeSplitPlan() {
-  const mode = $("modeSelect").value;
-  const amountStr = $("amountInput").value.trim();
-  const amount = parseFloatSafe(amountStr);
-  if (amount === null || amount <= 0) throw new Error("Enter a valid amount > 0.");
-
-  const recs = recipientsFromUI();
-  if (recs.length === 0) throw new Error("Add at least 1 recipient.");
-
-  for (const r of recs) {
-    if (!isAddressLike(r.address)) throw new Error(`Invalid recipient address: ${r.address || "(blank)"}`);
-    if (!Number.isFinite(r.pct) || r.pct < 0) throw new Error("Percent must be a number >= 0.");
-  }
-
-  const totalPct = recs.reduce((a, r) => a + (Number(r.pct) || 0), 0);
-  if (Math.abs(totalPct - 100) > 0.0001) {
-    throw new Error(`Percentages must total 100%. Current total: ${fmt(totalPct, 6)}%`);
-  }
-
-  const fee = amount * (FEE_BPS / 10000);
-  const distributable = amount - fee;
-  if (distributable <= 0) throw new Error("Amount is too small after fee.");
-
-  return { mode, amount, fee, distributable, recs };
-}
-
-function updateSummary() {
-  try {
-    const totalPct = updatePctTotal();
-    const amount = parseFloatSafe($("amountInput").value);
-    if (amount === null || amount <= 0) {
-      $("feeAmount").textContent = "—";
-      $("distributedAmount").textContent = "—";
+    if (!best) {
+      state.token.priceUsd = null;
+      state.token.dex = null;
+      el("tokenPriceUsd").textContent = "—";
+      el("dexReadout").textContent = "No pair found";
+      el("dexHint").textContent = "Price feed: Dexscreener (no pair found)";
       return;
     }
-    const fee = amount * (FEE_BPS / 10000);
-    const dist = amount - fee;
 
-    const mode = $("modeSelect").value;
-    const sym = (mode === "bnb") ? "BNB" : ($("tokenSymbol").value.trim() || "TOKEN");
+    const priceUsd = Number(best.priceUsd || 0);
+    state.token.priceUsd = priceUsd > 0 ? priceUsd : null;
+    state.token.dex = best;
 
-    $("feeAmount").textContent = `${fmt(fee, 8)} ${sym}`;
-    $("distributedAmount").textContent = `${fmt(dist, 8)} ${sym}`;
+    el("tokenPriceUsd").textContent = state.token.priceUsd ? `$${state.token.priceUsd.toFixed(6)}` : "—";
 
-  } catch {
-    // ignore
-  }
-}
+    const liq = Number(best?.liquidity?.usd || 0);
+    const vol = Number(best?.volume?.h24 || 0);
+    const chg = Number(best?.priceChange?.h24 || 0);
+    el("dexReadout").textContent =
+      `Liq $${liq.toLocaleString()} • Vol24h $${vol.toLocaleString()} • Δ24h ${isFinite(chg)? chg.toFixed(2):"0"}%`;
 
-function renderPreview(plan) {
-  const sym = plan.mode === "bnb" ? "BNB" : ($("tokenSymbol").value.trim() || "TOKEN");
-  const lines = [];
-  lines.push(`MODE: ${plan.mode.toUpperCase()}`);
-  lines.push(`TOTAL AMOUNT: ${plan.amount} ${sym}`);
-  lines.push(`FEE (1%): ${fmt(plan.fee, 10)} ${sym} -> ${FEE_WALLET}`);
-  lines.push(`DISTRIBUTABLE: ${fmt(plan.distributable, 10)} ${sym}`);
-  lines.push("");
-  lines.push("RECIPIENTS:");
-  for (const r of plan.recs) {
-    const amt = plan.distributable * (r.pct / 100);
-    lines.push(`- ${r.address} | ${fmt(r.pct, 6)}% => ${fmt(amt, 10)} ${sym}`);
-  }
-  $("previewBox").textContent = lines.join("\n");
-}
-
-async function sendNativeBNB(to, valueWeiHex) {
-  const tx = {
-    from: walletAddress,
-    to,
-    value: valueWeiHex,
-  };
-  return await window.ethereum.request({ method: "eth_sendTransaction", params: [tx] });
-}
-
-async function sendErc20Transfer(tokenAddr, to, amountBaseUnits) {
-  // data = transfer(to, amount)
-  const data =
-    SEL_TRANSFER +
-    encodeAddress(to) +
-    encodeUint256(amountBaseUnits);
-
-  const tx = {
-    from: walletAddress,
-    to: tokenAddr,
-    data,
-    // value omitted
-  };
-  return await window.ethereum.request({ method: "eth_sendTransaction", params: [tx] });
-}
-
-async function executeSplit() {
-  if (!walletAddress) {
-    setStatus("Connect your wallet first.", true);
-    return;
-  }
-  if (currentChainId !== BSC_CHAIN_ID_DEC) {
-    setStatus("Wrong network. Switch to BSC first.", true);
-    return;
-  }
-  if (!isAddressLike(FEE_WALLET) || FEE_WALLET === "0x0000000000000000000000000000000000000000") {
-    setStatus("Set your FEE_WALLET address in app.js first, then commit and redeploy.", true);
-    return;
-  }
-
-  let plan;
-  try {
-    plan = computeSplitPlan();
+    el("dexHint").textContent = "Price feed: Dexscreener (best pair selected)";
+    log("Dexscreener intel updated.");
   } catch (e) {
-    setStatus(e.message || String(e), true);
+    state.token.priceUsd = null;
+    state.token.dex = null;
+    el("tokenPriceUsd").textContent = "—";
+    el("dexReadout").textContent = "Dex feed unavailable";
+    el("dexHint").textContent = "Price feed: Dexscreener (unavailable)";
+    log(`Dexscreener error: ${e.message || e}`);
+  }
+}
+
+function updateUsdEstimate() {
+  const amtRaw = normalizeAmountInput(el("amount").value);
+  if (!amtRaw || !state.token.priceUsd) {
+    el("usdEstimate").textContent = "—";
     return;
   }
+  const n = Number(amtRaw);
+  if (!isFinite(n) || n <= 0) {
+    el("usdEstimate").textContent = "—";
+    return;
+  }
+  const est = n * state.token.priceUsd;
+  el("usdEstimate").textContent = `$${est.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
 
-  // Confirm-ish by previewing
-  renderPreview(plan);
+async function refreshBalanceAndAllowance() {
+  try {
+    const tokenAddr = state.token.address;
+    const splitterAddr = el("splitterAddress").value.trim();
+    if (!isAddress(tokenAddr) || !isAddress(splitterAddr) || !state.account || !state.provider) return;
 
-  const sym = plan.mode === "bnb" ? "BNB" : ($("tokenSymbol").value.trim() || "TOKEN");
+    const token = new ethers.Contract(tokenAddr, ERC20_ABI, state.provider);
+    const [bal, alw] = await Promise.all([
+      token.balanceOf(state.account),
+      token.allowance(state.account, splitterAddr),
+    ]);
+
+    const dec = state.token.decimals || 18;
+    const balFmt = ethers.utils.formatUnits(bal, dec);
+    const alwFmt = ethers.utils.formatUnits(alw, dec);
+
+    el("balanceReadout").textContent = `${Number(balFmt).toLocaleString(undefined,{maximumFractionDigits:6})} ${state.token.symbol || ""}`;
+    el("allowanceReadout").textContent = `${Number(alwFmt).toLocaleString(undefined,{maximumFractionDigits:6})} ${state.token.symbol || ""}`;
+    log("Balance + allowance updated.");
+  } catch (e) {
+    log(`Balance/allowance error: ${e.message || e}`);
+  }
+}
+
+function validateInputs() {
+  const splitterAddr = el("splitterAddress").value.trim();
+  const tokenAddr = el("tokenAddress").value.trim();
+  const amountRaw = normalizeAmountInput(el("amount").value);
+
+  if (!state.account) return "Connect wallet first.";
+  if (!isAddress(splitterAddr)) return "Enter a valid Splitter Contract address (BSC).";
+  if (!isAddress(tokenAddr)) return "Enter a valid Token Contract address (BEP20).";
+  if (!amountRaw) return "Enter an amount.";
+  if (!state.recipients.length) return "Add at least 1 recipient.";
+
+  const sum = pctTotal();
+  if (sum !== 100) return "Total percent must equal 100.";
+
+  for (const r of state.recipients) {
+    if (!isAddress(r.addr)) return `Invalid recipient address: ${r.addr}`;
+    const p = Number(r.pct);
+    if (!isFinite(p) || p <= 0) return "Each recipient percent must be > 0.";
+  }
+
+  // amount parse check
+  const n = Number(amountRaw);
+  if (!isFinite(n) || n <= 0) return "Amount must be a positive number.";
+
+  return null;
+}
+
+function buildBpsArray() {
+  // Convert % to basis points (100% => 10000)
+  // We'll map 1% => 100 bps. Example: 50% => 5000 bps
+  const bps = state.recipients.map(r => Math.round(Number(r.pct) * 100));
+  const sum = bps.reduce((a,b)=>a+b,0);
+
+  // Fix rounding drift to exactly 10000 by adjusting the last entry
+  const drift = 10000 - sum;
+  if (bps.length > 0 && drift !== 0) bps[bps.length - 1] += drift;
+
+  return bps;
+}
+
+async function approve() {
+  setWarn("");
+  const err = validateInputs();
+  if (err) { setWarn(err); return; }
+
+  const splitterAddr = el("splitterAddress").value.trim();
+  const tokenAddr = el("tokenAddress").value.trim();
+  const amountRaw = normalizeAmountInput(el("amount").value);
 
   try {
-    setStatus(`Executing split… MetaMask will prompt multiple transactions.`);
-    $("executeBtn").disabled = true;
+    await ensureBsc();
 
-    if (plan.mode === "bnb") {
-      // Convert BNB amounts to wei
-      const wei = (amt) => {
-        // 18 decimals
-        return toHex(amountToBaseUnits(String(amt), 18));
-      };
+    const token = new ethers.Contract(tokenAddr, ERC20_ABI, state.signer);
+    const amount = ethers.utils.parseUnits(amountRaw, state.token.decimals || 18);
 
-      // 1) fee transfer
-      await sendNativeBNB(FEE_WALLET, wei(plan.fee));
+    log(`Approving splitter ${shortAddr(splitterAddr)} for ${amountRaw} ${state.token.symbol}...`);
+    const tx = await token.approve(splitterAddr, amount);
+    log(`Approve tx sent: ${tx.hash}`);
 
-      // 2) recipients transfers
-      for (const r of plan.recs) {
-        const amt = plan.distributable * (r.pct / 100);
-        await sendNativeBNB(r.address, wei(amt));
-      }
+    await tx.wait();
+    log("Approve confirmed.");
 
-    } else {
-      const tokenAddr = $("tokenAddress").value.trim();
-      if (!isAddressLike(tokenAddr)) {
-        throw new Error("ERC-20 mode requires a valid token address.");
-      }
-
-      // decimals: read from UI (AUTO should have been loaded, but allow manual)
-      const dec = parseInt($("tokenDecimals").value, 10);
-      const decimals = Number.isFinite(dec) ? dec : 18;
-
-      // Convert total amounts to base units
-      const feeUnits = amountToBaseUnits(String(plan.fee), decimals);
-
-      // 1) fee transfer
-      await sendErc20Transfer(tokenAddr, FEE_WALLET, feeUnits);
-
-      // 2) recipients transfers
-      for (const r of plan.recs) {
-        const amt = plan.distributable * (r.pct / 100);
-        const units = amountToBaseUnits(String(amt), decimals);
-        await sendErc20Transfer(tokenAddr, r.address, units);
-      }
-    }
-
-    setStatus(`Split complete ✅ (${sym}).`);
+    await refreshBalanceAndAllowance();
   } catch (e) {
-    setStatus(`Execution failed: ${e?.message || e}`, true);
-  } finally {
-    $("executeBtn").disabled = false;
+    log(`Approve failed: ${e.message || e}`);
+    setWarn(`Approve failed: ${e.message || e}`);
   }
 }
 
-/* ---------- Event wiring ---------- */
+async function split() {
+  setWarn("");
+  const err = validateInputs();
+  if (err) { setWarn(err); return; }
 
-function wireEvents() {
-  $("connectBtn").onclick = connectWallet;
-  $("switchBscBtn").onclick = switchToBSC;
-  $("disconnectBtn").onclick = disconnectUI;
+  const splitterAddr = el("splitterAddress").value.trim();
+  const tokenAddr = el("tokenAddress").value.trim();
+  const amountRaw = normalizeAmountInput(el("amount").value);
 
-  $("addRecipientBtn").onclick = () => addRecipientRow("", "");
-  $("normalizeBtn").onclick = normalizeTo100;
+  try {
+    await ensureBsc();
 
-  $("loadTokenBtn").onclick = loadTokenMeta;
+    const splitter = new ethers.Contract(splitterAddr, SPLITTER_ABI, state.signer);
+    const amount = ethers.utils.parseUnits(amountRaw, state.token.decimals || 18);
 
-  $("amountInput").addEventListener("input", async () => {
-    updateSummary();
-    await refreshPriceAndValue();
-  });
+    const recipients = state.recipients.map(r => r.addr.trim());
+    const bps = buildBpsArray();
 
-  $("tokenAddress").addEventListener("input", async () => {
-    // price refresh when token changes
-    await refreshPriceAndValue();
-  });
+    log(`Split execution started...`);
+    log(`Token: ${tokenAddr}`);
+    log(`Amount: ${amountRaw} ${state.token.symbol}`);
+    log(`Recipients: ${recipients.length} • BPS total: ${bps.reduce((a,b)=>a+b,0)}`);
 
-  $("modeSelect").addEventListener("change", async () => {
-    const mode = $("modeSelect").value;
-    const tokenFields = (mode === "erc20");
-    $("tokenAddress").disabled = !tokenFields;
-    $("tokenSymbol").disabled = !tokenFields;
-    $("tokenDecimals").disabled = !tokenFields;
-    $("loadTokenBtn").disabled = !tokenFields;
+    const tx = await splitter.splitToken(tokenAddr, amount, recipients, bps);
+    log(`Split tx sent: ${tx.hash}`);
 
-    await refreshPriceAndValue();
-    updateSummary();
-  });
+    const receipt = await tx.wait();
+    log(`Split confirmed in block ${receipt.blockNumber}`);
 
-  $("previewBtn").onclick = () => {
-    try {
-      const plan = computeSplitPlan();
-      renderPreview(plan);
-      setStatus("Preview ready. If it looks correct, click EXECUTE SPLIT.");
-    } catch (e) {
-      setStatus(e.message || String(e), true);
+    // Receipt UI
+    const txUrl = `https://bscscan.com/tx/${tx.hash}`;
+    state.lastTxUrl = txUrl;
+    el("txLink").href = txUrl;
+    el("txLink").style.display = "inline-flex";
+
+    const lines = [];
+    lines.push(`ZEPHENHEL CITADEL — PROOF-OF-OUTCOME`);
+    lines.push(`────────────────────────────────────`);
+    lines.push(`TX: ${tx.hash}`);
+    lines.push(`Token: ${tokenAddr} (${state.token.symbol || "?"})`);
+    lines.push(`Amount: ${amountRaw}`);
+    if (state.token.priceUsd) {
+      const est = Number(amountRaw) * state.token.priceUsd;
+      if (isFinite(est)) lines.push(`USD Estimate: $${est.toLocaleString(undefined,{maximumFractionDigits:2})}`);
     }
-  };
-
-  $("executeBtn").onclick = executeSplit;
-
-  // MetaMask event listeners
-  if (window.ethereum) {
-    window.ethereum.on("chainChanged", async () => {
-      await detectNetwork();
-      await refreshPriceAndValue();
+    lines.push(`Fee: 1%`);
+    lines.push(`Recipients:`);
+    state.recipients.forEach((r, i) => {
+      lines.push(` ${i+1}. ${r.addr} — ${r.pct}%`);
     });
-    window.ethereum.on("accountsChanged", async (accounts) => {
-      walletAddress = accounts?.[0] || null;
-      $("walletPill").innerHTML = `Wallet: <b>${walletAddress ? walletAddress.slice(0,6)+"…"+walletAddress.slice(-4) : "Disconnected"}</b>`;
-      await refreshPriceAndValue();
-    });
+    lines.push(`Time: ${new Date().toLocaleString()}`);
+
+    const text = lines.join("\n");
+    state.lastReceiptText = text;
+    el("receiptBox").textContent = text;
+
+    await refreshBalanceAndAllowance();
+  } catch (e) {
+    log(`Split failed: ${e.message || e}`);
+    setWarn(`Split failed: ${e.message || e}
+
+If this says the function/signature is wrong, send me your splitter contract function name + parameters and I will match the ABI exactly.`);
   }
 }
 
-async function init() {
-  wireEvents();
-
-  // Start with 2 recipient rows
-  addRecipientRow("", "50");
-  addRecipientRow("", "50");
-
-  if (window.ethereum) {
-    await detectNetwork();
-    const accounts = await window.ethereum.request({ method: "eth_accounts" });
-    if (accounts?.[0]) {
-      walletAddress = accounts[0];
-      $("walletPill").innerHTML = `Wallet: <b>${walletAddress.slice(0,6)+"…"+walletAddress.slice(-4)}</b>`;
-      setStatus("Wallet detected. Ready.");
-    } else {
-      setStatus("System initialized. Awaiting wallet connection and command execution.");
+async function onChainChanged() {
+  try {
+    const chainId = await window.ethereum.request({ method: "eth_chainId" });
+    state.chainId = chainId;
+    el("networkPill").innerHTML = `Network: <b>${chainId === BSC_CHAIN_ID_HEX ? "BSC" : chainId}</b>`;
+    log(`Chain changed: ${chainId}`);
+    if (state.account && state.provider) {
+      await refreshBalanceAndAllowance();
     }
-  } else {
-    $("networkPill").innerHTML = `Network: <b>—</b>`;
-    setStatus("MetaMask not detected. Install MetaMask, then refresh.", true);
-  }
-
-  // default mode
-  $("modeSelect").dispatchEvent(new Event("change"));
-  updateSummary();
+  } catch {}
 }
 
-init();
+async function onAccountsChanged(accs) {
+  const a = accs && accs[0];
+  if (!a) {
+    state.account = null;
+    el("accountPill").innerHTML = `Wallet: <b>Disconnected</b>`;
+    log("Wallet disconnected.");
+    return;
+  }
+  state.account = a;
+  el("accountPill").innerHTML = `Wallet: <b>${shortAddr(a)}</b>`;
+  log(`Account changed: ${a}`);
+  if (state.token.address) await refreshBalanceAndAllowance();
+}
+
+function copyReceipt() {
+  const txt = state.lastReceiptText || "";
+  if (!txt) { setWarn("No receipt to copy yet."); return; }
+  navigator.clipboard.writeText(txt).then(() => {
+    log("Receipt copied.");
+  }).catch(() => {
+    setWarn("Clipboard blocked by browser. Select + copy manually from the receipt box.");
+  });
+}
+
+function wireUI() {
+  el("connectBtn").addEventListener("click", connect);
+  el("switchBscBtn").addEventListener("click", async () => {
+    try { await ensureBsc(); await onChainChanged(); } catch(e){ setWarn(e.message || String(e)); }
+  });
+
+  el("tokenAddress").addEventListener("change", loadTokenMeta);
+  el("tokenAddress").addEventListener("blur", loadTokenMeta);
+
+  el("splitterAddress").addEventListener("change", refreshBalanceAndAllowance);
+  el("splitterAddress").addEventListener("blur", refreshBalanceAndAllowance);
+
+  el("amount").addEventListener("input", () => {
+    updateUsdEstimate();
+  });
+
+  el("addRecipientBtn").addEventListener("click", () => addRecipient("", ""));
+  el("equalizeBtn").addEventListener("click", equalize);
+  el("clearBtn").addEventListener("click", clearRecipients);
+
+  el("approveBtn").addEventListener("click", approve);
+  el("splitBtn").addEventListener("click", split);
+
+  el("copyReceiptBtn").addEventListener("click", copyReceipt);
+
+  // Start with 2 recipients like your screenshot (easy workflow)
+  if (state.recipients.length === 0) {
+    addRecipient("", "50");
+    addRecipient("", "50");
+  }
+
+  // Metamask listeners
+  if (window.ethereum) {
+    window.ethereum.on("chainChanged", onChainChanged);
+    window.ethereum.on("accountsChanged", onAccountsChanged);
+  }
+
+  log("Citadel boot complete. Click CONNECT WALLET.");
+}
+
+wireUI();
