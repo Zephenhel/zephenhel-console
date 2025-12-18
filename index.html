@@ -3,26 +3,24 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ZEPHENHEL CONSOLE</title>
+  <title>ZEPHENHEL CONSOLE — BSC Splitter</title>
 
   <link rel="stylesheet" href="./styles.css" />
 
-  <!-- Ethers v5 (stable CDN) -->
+  <!-- Ethers v5 -->
   <script defer src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-
-  <!-- Your app -->
   <script defer src="./app.js"></script>
 </head>
 
 <body>
-  <div class="page">
-    <header class="top">
-      <div class="title">
+  <div class="wrap">
+    <header class="hdr">
+      <div>
         <div class="h1">ZEPHENHEL CONSOLE</div>
-        <div class="h2">Splitter • Inheritance • Tactical Control</div>
+        <div class="h2">BSC Splitter • Tactical Control</div>
       </div>
 
-      <div class="statusPills">
+      <div class="pills">
         <span id="pillNetwork" class="pill">Network: <b>Unknown</b></span>
         <span id="pillWallet" class="pill warn">Wallet: <b>Disconnected</b></span>
       </div>
@@ -30,12 +28,12 @@
 
     <section class="panel">
       <div class="panelRow">
-        <div class="panelText">
-          <div class="panelLine"><b>System:</b> initialized. Awaiting wallet connection and command execution.</div>
-          <div class="panelLine small">Tip: If the button does nothing, check the Log panel below for the exact error.</div>
+        <div class="panelLeft">
+          <div class="panelTitle">COMMAND INTERFACE</div>
+          <div id="status" class="status">System online. Awaiting wallet connection.</div>
         </div>
 
-        <div class="panelButtons">
+        <div class="panelRight">
           <button id="btnConnect" class="btn primary">CONNECT WALLET</button>
           <button id="btnSwitchBsc" class="btn">SWITCH TO BSC</button>
         </div>
@@ -44,42 +42,43 @@
 
     <section class="grid">
       <div class="card">
-        <div class="cardTitle">Split Native (BNB)</div>
+        <div class="cardTitle">Token Split (ERC20 / BEP20)</div>
 
-        <label class="lbl">Total Amount (BNB)</label>
-        <input id="nativeAmount" class="inp" placeholder="e.g. 0.01" />
+        <label class="lbl">Token Contract (BSC)</label>
+        <input id="tokenAddress" class="inp" placeholder="0x..." autocomplete="off" />
 
-        <label class="lbl">Recipients</label>
-        <textarea id="recipients" class="inp area" placeholder="One per line:
-0xABC... | 50
-0xDEF... | 50"></textarea>
+        <label class="lbl">Amount (token units)</label>
+        <input id="tokenAmount" class="inp" placeholder="e.g. 100" autocomplete="off" />
 
-        <button id="btnSplitNative" class="btn primary">SPLIT BNB</button>
-        <div class="hint">Format: <code>address | percent</code> (percent total must be 100)</div>
+        <div id="tokenUsd" class="usdLine">≈ —</div>
+
+        <div class="rowHead">
+          <div class="rowHeadTitle">Recipients</div>
+          <div class="rowHeadRight">
+            <div id="pctTotal" class="pctTotal">Total: 0%</div>
+            <button id="btnAddRecipient" class="btn small">+ ADD</button>
+          </div>
+        </div>
+
+        <div id="recipientsBox" class="recipientsBox"></div>
+
+        <div class="rowBtns">
+          <button id="btnApprove" class="btn">APPROVE</button>
+          <button id="btnSplit" class="btn primary">SPLIT</button>
+        </div>
+
+        <div class="hint">
+          • Total percent must equal <b>100</b> • Contract: <span class="mono" id="splitterAddr"></span>
+        </div>
       </div>
 
       <div class="card">
-        <div class="cardTitle">Split ERC20 Token</div>
-
-        <label class="lbl">Token Contract Address</label>
-        <input id="tokenAddress" class="inp" placeholder="0x..." />
-
-        <label class="lbl">Total Amount (token units)</label>
-        <input id="tokenAmount" class="inp" placeholder="e.g. 100" />
-
-        <button id="btnSplitErc20" class="btn primary">SPLIT ERC20</button>
-        <div class="hint">Sends multiple transfers from your wallet (one tx per recipient).</div>
-      </div>
-
-      <div class="card full">
         <div class="cardTitle">Runtime Log</div>
         <pre id="log" class="log"></pre>
       </div>
     </section>
 
-    <footer class="foot">
-      Zephenhel © Tactical Financial Infrastructure
-    </footer>
+    <footer class="foot">Zephenhel © Tactical Financial Infrastructure</footer>
   </div>
 </body>
 </html>
