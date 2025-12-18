@@ -1,235 +1,209 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ZEPHENHEL CITADEL • CYBER WARFARE CONSOLE</title>
-  <link rel="stylesheet" href="./styles.css" />
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ZEPHENHEL CITADEL</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
-
 <body>
-  <!-- Animated background layers -->
-  <div class="bg-grid"></div>
-  <div class="bg-scanlines"></div>
-  <div class="bg-vignette"></div>
-
-  <!-- HUD Top Bar -->
-  <header class="hud-top">
-    <div class="hud-left">
-      <div class="sigil">Z</div>
-      <div class="hud-title">
-        <div class="title">ZEPHENHEL CITADEL</div>
-        <div class="subtitle">CYBER WARFARE CONSOLE • TRI-CHAIN SPLITTER + VAULT</div>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-badge">Z</div>
+        <div class="brand-text">
+          <h1>ZEPHENHEL CITADEL</h1>
+          <p>Mythic tri-chain splitter • BSC • Ethereum • Polygon</p>
+        </div>
       </div>
-    </div>
 
-    <div class="hud-right">
-      <div class="hud-pill" id="netPill">NETWORK: —</div>
-      <div class="hud-pill" id="walletPill">WALLET: DISCONNECTED</div>
+      <div class="pills">
+        <div class="pill net" id="pillNet">Network: —</div>
+        <div class="pill wallet" id="pillWallet">Wallet: Disconnected</div>
 
-      <button class="hud-btn gold" id="connectBtn">
-        <span class="dot" id="connDot"></span>
-        <span id="connectText">CONNECT</span>
-      </button>
-
-      <button class="hud-btn ghost" id="switchBtn">SWITCH</button>
+        <button class="btn ghost" id="btnSwitch">Switch Network</button>
+        <button class="btn gold" id="btnConnect">Connect</button>
+      </div>
     </div>
   </header>
 
-  <!-- Mode Tabs -->
-  <nav class="tabs">
-    <button class="tab active" id="tabSplit">SPLITTER</button>
-    <button class="tab" id="tabVault">VAULT</button>
-    <div class="tabs-right">
-      <label class="toggle">
-        <input id="soundToggle" type="checkbox" checked />
-        <span class="toggle-ui"></span>
-        <span class="toggle-text">SFX</span>
-      </label>
-      <button class="hud-btn ghost" id="clearLogBtn">CLEAR LOG</button>
+  <main class="container">
+    <div class="tabs">
+      <button class="tab active" data-tab="split">Splitter</button>
+      <button class="tab" data-tab="vault">Inheritance Vault</button>
+      <div class="fx">
+        <label class="fx-toggle">
+          <input type="checkbox" id="chkSound" checked />
+          <span>Sound FX</span>
+        </label>
+      </div>
     </div>
-  </nav>
 
-  <main class="wrap">
-    <section class="grid">
-      <!-- LEFT PANEL -->
-      <div class="panel">
-        <div class="panel-head">
-          <div class="panel-title">
-            <span class="tag">OPERATOR</span>
-            <span class="name" id="panelTitle">DISTRIBUTION COMMAND</span>
-          </div>
-          <div class="panel-meta">
-            <div class="tiny">fee</div>
-            <div class="tiny glow">1% (platform)</div>
-          </div>
+    <section class="grid" id="tab-split">
+      <!-- LEFT: Splitter inputs -->
+      <div class="card">
+        <div class="card-title">
+          <h2>Split Command</h2>
+          <span class="tag" id="tagSplitter">Splitter: —</span>
         </div>
 
-        <!-- SPLITTER VIEW -->
-        <div id="viewSplit">
-          <div class="field">
-            <div class="label">CHAIN</div>
-            <select id="networkSel" class="input">
-              <option value="bsc">BSC MAINNET</option>
-              <option value="eth">ETHEREUM MAINNET</option>
-              <option value="polygon">POLYGON MAINNET</option>
-            </select>
+        <div class="panel">
+          <div class="label">Mode</div>
+          <div class="seg">
+            <button class="segbtn active" id="modeToken">Token Split (ERC20/BEP20)</button>
+            <button class="segbtn" id="modeNative">Native Split (BNB/ETH/MATIC)</button>
           </div>
 
-          <div class="field">
-            <div class="label">TOKEN ADDRESS (ERC20/BEP20)</div>
-            <input id="tokenAddr" class="input" placeholder="0x..." autocomplete="off" />
-            <div class="hint">Token-only splitter: enter token address (native coin not supported by this splitter).</div>
+          <div class="hr"></div>
+
+          <div id="tokenModeFields">
+            <div class="label">Token address (ERC20/BEP20)</div>
+            <input id="tokenAddress" placeholder="0x..." inputmode="text" spellcheck="false" />
+            <div class="small dim">Tip: Use USDC/USDT/etc contract address on the selected chain.</div>
           </div>
 
-          <div class="field two">
+          <div class="hr"></div>
+
+          <div class="two">
             <div>
-              <div class="label">AMOUNT</div>
-              <input id="amount" class="input" placeholder="0.0" inputmode="decimal" />
-              <div class="hint" id="gasHint">—</div>
+              <div class="label">Amount</div>
+              <div class="amountRow">
+                <input id="amount" placeholder="0.0" inputmode="decimal" />
+                <button class="btn ghost mini" id="btnMax">MAX</button>
+              </div>
+              <div class="small dim" id="maxHint">MAX is for native only. For tokens, enter an amount.</div>
             </div>
-            <div class="hud-box">
-              <div class="box-label">USD ESTIMATE</div>
-              <div class="box-value" id="usdEst">—</div>
-              <div class="box-label">POST-FEE EST</div>
-              <div class="box-value smallv" id="postFeeAmt">—</div>
-            </div>
-          </div>
 
-          <div class="divider"></div>
-
-          <div class="row-head">
-            <div>
-              <div class="label">RECIPIENT MATRIX</div>
-              <div class="hint">Percent must total 100%. Add/remove recipients.</div>
-            </div>
-            <div class="row-actions">
-              <div class="hud-pill small" id="totalPill">TOTAL: 0.00%</div>
-              <button class="hud-btn ghost" id="addRecBtn">+ ADD</button>
+            <div class="statbox">
+              <div class="label">USD estimate</div>
+              <div class="big" id="usdEstimate">$—</div>
+              <div class="small dim" id="postFeeLine">You receive (post-fee): —</div>
+              <div class="tiny dim" id="feeTiny">platform fee: <span class="goldtxt">1%</span></div>
             </div>
           </div>
 
-          <div id="recList" class="recList"></div>
+          <div class="hr"></div>
 
-          <div class="divider"></div>
+          <div class="card-title" style="margin-bottom:6px;">
+            <h2>Recipients</h2>
+            <div class="righttools">
+              <span class="tag">Total: <span id="totalPct">100.00%</span></span>
+              <button class="btn gold mini" id="btnAddRecipient">+ Add</button>
+            </div>
+          </div>
+
+          <div id="recipients"></div>
+
+          <div class="hr"></div>
 
           <div class="actions">
-            <button class="hud-btn ghost" id="approveBtn">APPROVE</button>
-            <button class="hud-btn gold" id="splitBtn">EXECUTE SPLIT</button>
+            <button class="btn ghost" id="btnApprove" disabled>Approve</button>
+            <button class="btn gold" id="btnExecute" disabled>Execute Split</button>
           </div>
 
-          <div class="alert error" id="errBox" style="display:none;">
-            <span class="badge">ERROR</span>
-            <span id="errText">—</span>
-          </div>
-        </div>
-
-        <!-- VAULT VIEW (UI only — wired in app.js next) -->
-        <div id="viewVault" style="display:none;">
-          <div class="field">
-            <div class="label">VAULT TOKEN ADDRESS</div>
-            <input id="vTokenAddr" class="input" placeholder="0x..." autocomplete="off" />
+          <div class="notice" id="noticeAuto" style="margin-top:10px;">
+            Citadel will <b>auto-detect</b> your splitter’s expected percent scale (100 / 10,000 / fee-adjusted) before sending.
           </div>
 
-          <div class="field two">
-            <div>
-              <div class="label">DEPOSIT AMOUNT</div>
-              <input id="vAmount" class="input" placeholder="0.0" inputmode="decimal" />
-            </div>
-            <div>
-              <div class="label">INACTIVITY (DAYS)</div>
-              <input id="vDays" class="input" placeholder="30" inputmode="numeric" />
-            </div>
-          </div>
-
-          <div class="field">
-            <div class="label">SAFE WALLET (EMERGENCY)</div>
-            <input id="vSafe" class="input" placeholder="0x..." autocomplete="off" />
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="row-head">
-            <div>
-              <div class="label">INHERITANCE RECIPIENTS</div>
-              <div class="hint">Shares act like weights (ratios). Must be >0.</div>
-            </div>
-            <div class="row-actions">
-              <button class="hud-btn ghost" id="vAddRecBtn">+ ADD</button>
-            </div>
-          </div>
-
-          <div id="vRecList" class="recList"></div>
-
-          <div class="divider"></div>
-
-          <div class="actions">
-            <button class="hud-btn ghost" id="vApproveBtn">APPROVE</button>
-            <button class="hud-btn gold" id="vCreateBtn">CREATE VAULT</button>
-          </div>
-
-          <div class="actions">
-            <button class="hud-btn ghost" id="vPingBtn">I'M ALIVE (PING)</button>
-            <button class="hud-btn ghost" id="vEmergencyBtn">EMERGENCY → SAFE</button>
-            <button class="hud-btn gold" id="vExecuteBtn">EXECUTE INHERITANCE</button>
-          </div>
-
-          <div class="hint">Vault automation requires Chainlink Automation on the deployed Vault v2.</div>
+          <div class="error" id="errBox" style="display:none;margin-top:10px;"></div>
         </div>
       </div>
 
-      <!-- RIGHT PANEL -->
-      <div class="panel">
-        <div class="panel-head">
-          <div class="panel-title">
-            <span class="tag">SYSTEM</span>
-            <span class="name">LIVE TELEMETRY</span>
+      <!-- RIGHT: Live data + log -->
+      <div class="card">
+        <div class="card-title">
+          <h2>Live Telemetry</h2>
+          <div class="righttools">
+            <button class="btn ghost mini" id="btnRefresh">Refresh</button>
+            <button class="btn ghost mini" id="btnClearLog">Clear</button>
           </div>
-          <div class="panel-meta">
-            <button class="hud-btn ghost" id="liveBtn">REFRESH</button>
-          </div>
-        </div>
-
-        <div class="field">
-          <div class="label">ACTIVE SPLITTER</div>
-          <input id="splitterAddr" class="input" readonly />
         </div>
 
         <div class="telemetry">
-          <div class="tile">
-            <div class="t-label">WALLET BALANCE</div>
-            <div class="t-value" id="walletBal">—</div>
-            <div class="t-sub" id="nativeTag">—</div>
+          <div class="tcard">
+            <div class="label">Native balance</div>
+            <div class="big" id="nativeBal">—</div>
           </div>
-          <div class="tile">
-            <div class="t-label">TOKEN BALANCE</div>
-            <div class="t-value" id="tokBal">—</div>
-            <div class="t-sub" id="tokSym">—</div>
+          <div class="tcard">
+            <div class="label">Token symbol</div>
+            <div class="big" id="tokenSym">—</div>
           </div>
-          <div class="tile">
-            <div class="t-label">DECIMALS</div>
-            <div class="t-value" id="tokDec">—</div>
-            <div class="t-sub">ERC20</div>
+          <div class="tcard">
+            <div class="label">Token decimals</div>
+            <div class="big" id="tokenDec">—</div>
           </div>
-          <div class="tile">
-            <div class="t-label">ALLOWANCE → SPLITTER</div>
-            <div class="t-value" id="allow">—</div>
-            <div class="t-sub">APPROVE REQUIRED</div>
+          <div class="tcard">
+            <div class="label">Token balance</div>
+            <div class="big" id="tokenBal">—</div>
+          </div>
+          <div class="tcard span2">
+            <div class="label">Allowance → splitter</div>
+            <div class="big" id="allowance">—</div>
+            <div class="small dim" id="spenderAddr">—</div>
           </div>
         </div>
 
-        <div class="divider"></div>
+        <div class="hr"></div>
 
-        <div class="loghead">
-          <div class="label">RUNTIME LOG</div>
-          <div class="hint">Every action prints exact params + tx hash.</div>
+        <div class="label">Runtime log</div>
+        <div class="log" id="log"></div>
+
+        <div class="footer-note">Always test small amounts first.</div>
+      </div>
+    </section>
+
+    <!-- Vault tab -->
+    <section class="grid" id="tab-vault" style="display:none;">
+      <div class="card">
+        <div class="card-title">
+          <h2>Inheritance Vault</h2>
+          <span class="tag">Multi-chain</span>
         </div>
-        <pre class="log" id="log"></pre>
+
+        <div class="notice">
+          Your vault contracts are deployed, but the frontend needs the <b>Vault ABI</b> (function names) to call them.
+          Paste the ABI from the explorer “Contract → ABI” section, then use the controls below.
+        </div>
+
+        <div class="hr"></div>
+
+        <div class="label">Vault address (auto per network)</div>
+        <input id="vaultAddress" placeholder="0x..." />
+
+        <div class="label" style="margin-top:10px;">Vault ABI (JSON)</div>
+        <textarea id="vaultAbi" rows="8" placeholder='[ { "inputs": ..., "name": "...", "type": "function" } ]'></textarea>
+
+        <div class="hr"></div>
+
+        <div class="label">Quick actions (appear once ABI loads)</div>
+        <div class="small dim">Citadel will show detected functions after ABI parse.</div>
+
+        <div id="vaultActions" class="vaultActions"></div>
+
+        <div class="hr"></div>
+
+        <div class="actions">
+          <button class="btn gold" id="btnLoadVault" disabled>Load Vault Interface</button>
+        </div>
+
+        <div class="error" id="vaultErr" style="display:none;margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <h2>Vault Log</h2>
+          <div class="righttools">
+            <button class="btn ghost mini" id="btnClearVaultLog">Clear</button>
+          </div>
+        </div>
+        <div class="log" id="vaultLog"></div>
+        <div class="footer-note">Vault automation depends on your contract’s ABI & rules.</div>
       </div>
     </section>
   </main>
 
-  <script src="./app.js"></script>
+  <!-- ethers v5 UMD -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
