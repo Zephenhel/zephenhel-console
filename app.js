@@ -1,365 +1,444 @@
-const SPLITTER_DEFAULT_BSC = "0x928B75D0fA6382D4B742afB6e500C9458B4f502c";
-const BSC_CHAIN_ID_HEX = "0x38";
+/* ZEPHENHEL CITADEL — Tri-Chain Splitter UI (GitHub Pages)
+   - Networks: BSC / ETH / POLY
+   - Connect + auto-switch chain
+   - ERC20 approve -> splitter
+   - Execute split using splitter contract function below
+   - DexScreener USD estimate
+*/
 
-const SPLITTER_ABI = [
-  "function depositAndDistribute(address token, address[] accounts, uint256[] shares, uint256 amount) external",
-];
-
-const ERC20_ABI = [
-  "function symbol() view returns (string)",
-  "function decimals() view returns (uint8)",
-  "function balanceOf(address) view returns (uint256)",
-  "function allowance(address owner, address spender) view returns (uint256)",
-  "function approve(address spender, uint256 amount) returns (bool)",
-];
-
-const $ = (id) => document.getElementById(id);
-
-let provider, signer, account;
-let tokenMeta = { symbol: "—", decimals: 18, priceUsd: null };
-
-function log(msg){
-  const el = $("log");
-  const t = new Date().toLocaleTimeString();
-  el.textContent += `[${t}] ${msg}\n`;
-  el.scrollTop = el.scrollHeight;
-}
-function setWarn(msg){
-  const w = $("warn");
-  if (!msg) { w.hidden = true; w.textContent = ""; return; }
-  w.hidden = false;
-  w.textContent = msg;
-  log("WARN: " + msg);
-}
-function setMmChip(){
-  const has = !!window.ethereum;
-  $("mmChip").innerHTML = `MetaMask: <b>${has ? "YES" : "NO"}</b>`;
-  if (!has) setWarn("MetaMask not detected. Make sure extension is enabled and you are not in Private/Incognito.");
-}
-function setNetChip(chainIdHex){
-  const ok = chainIdHex === BSC_CHAIN_ID_HEX;
-  $("netChip").innerHTML = `Chain: <b>${chainIdHex ? (ok ? "BSC" : chainIdHex) : "—"}</b>`;
-}
-function setAcctChip(addr){
-  $("acctChip").innerHTML = `Wallet: <b>${addr ? addr.slice(0,6)+"…"+addr.slice(-4) : "DISCONNECTED"}</b>`;
-}
-
-function addRow(addr="", pct=""){
-  const wrap = $("list");
-  const row = document.createElement("div");
-  row.className = "item";
-  row.innerHTML = `
-    <div>
-      <div class="miniLabel">Address</div>
-      <input class="addr" placeholder="0x..." spellcheck="false" value="${addr}"/>
-    </div>
-    <div>
-      <div class="miniLabel">Percent</div>
-      <input class="pct" placeholder="%" inputmode="numeric" value="${pct}"/>
-    </div>
-    <div>
-      <button class="btn mini del">REMOVE</button>
-    </div>
-  `;
-  row.querySelector(".del").onclick = () => { row.remove(); updateTotal(); };
-  row.querySelector(".pct").addEventListener("input", () => {
-    const el = row.querySelector(".pct");
-    el.value = el.value.replace(/[^\d]/g,"");
-    updateTotal();
-  });
-  wrap.appendChild(row);
-  updateTotal();
-}
-
-function rows(){
-  return [...document.querySelectorAll(".item")].map(r => ({
-    addr: r.querySelector(".addr").value.trim(),
-    pct: Number(r.querySelector(".pct").value.trim() || "0"),
-  }));
-}
-function updateTotal(){
-  const t = rows().reduce((a,x)=>a+(Number.isFinite(x.pct)?x.pct:0),0);
-  $("total").textContent = `${t}%`;
-  return t;
-}
-
-async function ensureEthers(){
-  // ethers is loaded async from CDN; wait briefly
-  for (let i=0;i<40;i++){
-    if (window.ethers) return true;
-    await new Promise(r=>setTimeout(r,50));
+/* ========= 1) CONFIG: YOUR SPLITTER ADDRESSES ========= */
+const CHAINS = {
+  BSC: {
+    key: "BSC",
+    name: "BSC",
+    chainIdHex: "0x38",
+    chainIdDec: 56,
+    native: "BNB",
+    dexChain: "bsc",
+    splitter: "0x928B75D0fA6382D4B742afB6e500C9458B4f502c", // <-- your BSC splitter (from your screenshot)
+    rpcAddParams: {
+      chainId: "0x38",
+      chainName: "BNB Smart Chain",
+      nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
+      rpcUrls: ["https://bsc-dataseed.binance.org/"],
+      blockExplorerUrls: ["https://bscscan.com/"]
+    }
+  },
+  ETH: {
+    key: "ETH",
+    name: "Ethereum",
+    chainIdHex: "0x1",
+    chainIdDec: 1,
+    native: "ETH",
+    dexChain: "ethereum",
+    splitter: "PASTE_YOUR_ETH_SPLITTER_ADDRESS_HERE",
+    rpcAddParams: null // MetaMask always has ETH
+  },
+  POLY: {
+    key: "POLY",
+    name: "Polygon",
+    chainIdHex: "0x89",
+    chainIdDec: 137,
+    native: "MATIC",
+    dexChain: "polygon",
+    splitter: "PASTE_YOUR_POLYGON_SPLITTER_ADDRESS_HERE",
+    rpcAddParams: {
+      chainId: "0x89",
+      chainName: "Polygon",
+      nativeCurrency: { name: "MATIC", symbol: "MATIC", decimals: 18 },
+      rpcUrls: ["https://polygon-rpc.com/"],
+      blockExplorerUrls: ["https://polygonscan.com/"]
+    }
   }
-  throw new Error("Ethers library did not load. Try hard refresh (Ctrl+Shift+R).");
+};
+
+/* ========= 2) SPLITTER CONTRACT CALL (MATCH YOUR CONTRACT) =========
+   Your prior version “worked”, so keep the same function shape.
+   This UI calls:
+     splitter.splitToken(token, amountWei, recipients[], percents[])
+   If your function name differs, change SPLIT_FN below + ABI fragment.
+*/
+const SPLIT_FN = "splitToken";
+const SPLITTER_ABI = [
+  `function ${SPLIT_FN}(address token, uint256 amount, address[] calldata recipients, uint256[] calldata percents) external`,
+];
+
+/* ERC20 ABI */
+const ERC20_ABI = [
+  "function decimals() view returns (uint8)",
+  "function symbol() view returns (string)",
+  "function name() view returns (string)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)"
+];
+
+/* ========= UI ELEMENTS ========= */
+const el = (id) => document.getElementById(id);
+
+const networkSelect = el("networkSelect");
+const connectBtn = el("connectBtn");
+const walletStatus = el("walletStatus");
+const splitterAddress = el("splitterAddress");
+const tokenAddress = el("tokenAddress");
+const tokenAmount = el("tokenAmount");
+const tokenMeta = el("tokenMeta");
+const usdEstimate = el("usdEstimate");
+const usdHint = el("usdHint");
+const recipientsWrap = el("recipients");
+const addRecipientBtn = el("addRecipientBtn");
+const totalPct = el("totalPct");
+const approveBtn = el("approveBtn");
+const splitBtn = el("splitBtn");
+const logBox = el("log");
+const clearLogBtn = el("clearLogBtn");
+
+let provider, signer, userAddress;
+let currentChain = CHAINS.BSC;
+let tokenCache = { address: null, decimals: 18, symbol: "TOKEN", priceUsd: null };
+
+/* ========= HELPERS ========= */
+function log(msg, type="info"){
+  const t = new Date().toLocaleTimeString();
+  const prefix = type === "err" ? "✖" : type === "ok" ? "✔" : "•";
+  logBox.textContent += `[${t}] ${prefix} ${msg}\n`;
+  logBox.scrollTop = logBox.scrollHeight;
 }
 
-async function ensureBsc(){
-  const chainId = await window.ethereum.request({ method: "eth_chainId" });
-  setNetChip(chainId);
-  if (chainId === BSC_CHAIN_ID_HEX) return;
+function shortAddr(a){
+  if(!a) return "";
+  return a.slice(0,6) + "…" + a.slice(-4);
+}
 
-  log("Switching chain to BSC…");
+function setWalletStatus(text, ok=false){
+  walletStatus.textContent = text;
+  walletStatus.style.color = ok ? "var(--ok)" : "var(--text)";
+}
+
+function isAddr(a){
+  try { return ethers.utils.isAddress(a); } catch { return false; }
+}
+
+function getRecipientRows(){
+  return Array.from(recipientsWrap.querySelectorAll(".rec-row"));
+}
+
+function calcTotalPct(){
+  let total = 0;
+  for(const row of getRecipientRows()){
+    const pct = Number(row.querySelector(".pct").value || 0);
+    total += pct;
+  }
+  totalPct.textContent = `${total}%`;
+  totalPct.style.color = (total === 100) ? "var(--ok)" : "var(--gold2)";
+  return total;
+}
+
+function addRecipientRow(address="", pct=""){
+  const row = document.createElement("div");
+  row.className = "rec-row";
+
+  row.innerHTML = `
+    <input class="input mono addr" type="text" placeholder="Recipient 0x..." value="${address}" />
+    <input class="input pct" type="number" min="0" max="100" step="1" placeholder="%" value="${pct}" />
+    <button class="btn btn-ghost remove">REMOVE</button>
+  `;
+
+  row.querySelector(".remove").addEventListener("click", () => {
+    row.remove();
+    calcTotalPct();
+    updateUsdEstimate();
+  });
+
+  row.querySelector(".pct").addEventListener("input", () => {
+    calcTotalPct();
+    updateUsdEstimate();
+  });
+  row.querySelector(".addr").addEventListener("input", () => updateUsdEstimate());
+
+  recipientsWrap.appendChild(row);
+  calcTotalPct();
+}
+
+/* ========= NETWORK SWITCH ========= */
+async function ensureMetaMask(){
+  if(!window.ethereum){
+    log("MetaMask not detected. Install/enable it, then refresh.", "err");
+    alert("MetaMask not detected. Please install/enable MetaMask and refresh.");
+    return false;
+  }
+  return true;
+}
+
+async function switchToChain(chain){
+  if(!await ensureMetaMask()) return false;
+
   try{
     await window.ethereum.request({
       method: "wallet_switchEthereumChain",
-      params: [{ chainId: BSC_CHAIN_ID_HEX }],
+      params: [{ chainId: chain.chainIdHex }]
     });
+    return true;
   }catch(e){
-    if (e?.code === 4902){
-      await window.ethereum.request({
-        method: "wallet_addEthereumChain",
-        params: [{
-          chainId: BSC_CHAIN_ID_HEX,
-          chainName: "BNB Smart Chain",
-          nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
-          rpcUrls: ["https://bsc-dataseed.binance.org/"],
-          blockExplorerUrls: ["https://bscscan.com/"],
-        }],
-      });
-    } else {
-      throw e;
+    // If chain not added (BSC/Polygon), try add
+    if(e && (e.code === 4902) && chain.rpcAddParams){
+      try{
+        await window.ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [chain.rpcAddParams]
+        });
+        return true;
+      }catch(addErr){
+        log(`Could not add ${chain.name}: ${addErr.message || addErr}`, "err");
+        return false;
+      }
     }
+    log(`Could not switch to ${chain.name}: ${e.message || e}`, "err");
+    return false;
   }
-  const chainId2 = await window.ethereum.request({ method: "eth_chainId" });
-  setNetChip(chainId2);
 }
 
+/* ========= CONNECT ========= */
 async function connect(){
-  setWarn("");
-  try{
-    await ensureEthers();
-    setMmChip();
+  if(!await ensureMetaMask()) return;
 
-    if (!window.ethereum) return;
+  const ok = await switchToChain(currentChain);
+  if(!ok) return;
 
-    await ensureBsc();
+  provider = new ethers.providers.Web3Provider(window.ethereum, "any");
+  await provider.send("eth_requestAccounts", []);
+  signer = provider.getSigner();
+  userAddress = await signer.getAddress();
 
-    provider = new ethers.providers.Web3Provider(window.ethereum, "any");
-    await provider.send("eth_requestAccounts", []);
-    signer = provider.getSigner();
-    account = await signer.getAddress();
-    setAcctChip(account);
-    log("Connected: " + account);
+  setWalletStatus(shortAddr(userAddress), true);
+  connectBtn.textContent = "CONNECTED";
+  connectBtn.disabled = true;
 
-    await refreshTokenPanels();
-  }catch(e){
-    setWarn(e?.message || String(e));
-  }
+  log(`Wallet connected: ${userAddress}`, "ok");
+
+  // React to account/network changes
+  window.ethereum.on("accountsChanged", async (accounts) => {
+    if(!accounts || !accounts.length){
+      location.reload();
+      return;
+    }
+    userAddress = accounts[0];
+    setWalletStatus(shortAddr(userAddress), true);
+    log(`Account changed: ${userAddress}`, "info");
+    tokenCache.address = null;
+    await refreshTokenMeta();
+  });
+
+  window.ethereum.on("chainChanged", async () => {
+    log("Chain changed. Reloading to resync.", "info");
+    location.reload();
+  });
+
+  await refreshTokenMeta();
 }
 
-async function fetchDexPriceUsd_BSC(tokenAddr){
+/* ========= TOKEN META + DEXSCREENER PRICE ========= */
+async function fetchDexPriceUsd(chainSlug, token){
   try{
-    const url = `https://api.dexscreener.com/latest/dex/tokens/${tokenAddr}`;
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) return null;
+    const url = `https://api.dexscreener.com/latest/dex/tokens/${token}`;
+    const res = await fetch(url);
     const data = await res.json();
-    const pairs = Array.isArray(data?.pairs) ? data.pairs : [];
-    const bscPairs = pairs.filter(p => (p.chainId || "").toLowerCase() === "bsc");
-    bscPairs.sort((a,b)=>Number(b?.liquidity?.usd||0)-Number(a?.liquidity?.usd||0));
-    const best = bscPairs[0] || pairs[0];
-    const p = Number(best?.priceUsd || 0);
-    return Number.isFinite(p) && p > 0 ? p : null;
-  }catch{
-    return null;
+    const pairs = (data && data.pairs) ? data.pairs : [];
+    // pick first pair that matches the chain
+    const p = pairs.find(x => (x.chainId || "").toLowerCase() === chainSlug.toLowerCase())
+           || pairs.find(x => (x.chainId || "").toLowerCase().includes(chainSlug.toLowerCase()))
+           || pairs[0];
+
+    if(p && p.priceUsd) return Number(p.priceUsd);
+  }catch(e){
+    // ignore
   }
+  return null;
 }
 
-function updateUsd(){
-  const amt = Number(($("amount").value || "").trim());
-  if (!Number.isFinite(amt) || amt <= 0 || !tokenMeta.priceUsd){
-    $("usd").textContent = "$—";
+async function refreshTokenMeta(){
+  const addr = (tokenAddress.value || "").trim();
+  if(!isAddr(addr)){
+    tokenMeta.textContent = "Token — Decimals — Price —";
+    tokenCache = { address: null, decimals: 18, symbol: "TOKEN", priceUsd: null };
+    updateUsdEstimate();
     return;
   }
-  const v = amt * tokenMeta.priceUsd;
-  $("usd").textContent = "$" + v.toLocaleString(undefined, { maximumFractionDigits: 2 });
-}
 
-async function refreshTokenPanels(){
-  const tokenAddr = $("token").value.trim();
-  const splitterAddr = $("splitter").value.trim();
-
-  $("bal").textContent = "—";
-  $("alw").textContent = "—";
-
-  if (!provider || !account) return;
-  if (!tokenAddr || !ethers.utils.isAddress(tokenAddr)){
-    $("tokenMeta").textContent = "Token: — • Decimals: — • Price: —";
+  if(tokenCache.address && tokenCache.address.toLowerCase() === addr.toLowerCase()){
+    updateUsdEstimate();
     return;
   }
 
   try{
-    const token = new ethers.Contract(tokenAddr, ERC20_ABI, provider);
-    const [sym, dec] = await Promise.all([token.symbol(), token.decimals()]);
-    tokenMeta.symbol = sym;
-    tokenMeta.decimals = Number(dec);
+    if(!signer){
+      // allow reading without connect? try public provider via MetaMask if possible
+      provider = new ethers.providers.Web3Provider(window.ethereum, "any");
+      signer = provider.getSigner();
+    }
+    const token = new ethers.Contract(addr, ERC20_ABI, provider);
+    const [decimals, symbol] = await Promise.all([token.decimals(), token.symbol()]);
+    tokenCache.address = addr;
+    tokenCache.decimals = decimals;
+    tokenCache.symbol = symbol;
 
-    const [bal, alw, price] = await Promise.all([
-      token.balanceOf(account),
-      (ethers.utils.isAddress(splitterAddr) ? token.allowance(account, splitterAddr) : Promise.resolve(ethers.constants.Zero)),
-      fetchDexPriceUsd_BSC(tokenAddr)
-    ]);
+    tokenMeta.textContent = `${symbol} — Decimals: ${decimals} — Price: loading…`;
 
-    tokenMeta.priceUsd = price;
+    const price = await fetchDexPriceUsd(currentChain.dexChain, addr);
+    tokenCache.priceUsd = price;
 
-    $("tokenMeta").textContent =
-      `Token: ${sym} • Decimals: ${tokenMeta.decimals} • Price: ${price ? "$"+price.toFixed(6) : "—"}`;
+    tokenMeta.textContent = `${symbol} — Decimals: ${decimals} — Price: ${price ? `$${price}` : "N/A"}`;
+    log(`Token loaded: ${symbol} (decimals ${decimals}) | price ${price ? `$${price}` : "N/A"}`, "ok");
 
-    $("bal").textContent = `${ethers.utils.formatUnits(bal, tokenMeta.decimals)} ${sym}`;
-    $("alw").textContent = ethers.utils.formatUnits(alw, tokenMeta.decimals);
-
-    updateUsd();
-    log(`Token loaded: ${sym} (dec ${tokenMeta.decimals})`);
+    updateUsdEstimate();
   }catch(e){
-    setWarn("Could not load token data. Check token address and that you are on BSC.");
+    log(`Token meta error: ${e.message || e}`, "err");
+    tokenMeta.textContent = "Token — Decimals — Price —";
+    tokenCache = { address: null, decimals: 18, symbol: "TOKEN", priceUsd: null };
+    updateUsdEstimate();
   }
 }
 
-function buildArrays(){
-  const splitterAddr = $("splitter").value.trim();
-  const tokenAddr = $("token").value.trim();
-  const amountStr = ($("amount").value || "").trim();
+function updateUsdEstimate(){
+  const amt = Number(tokenAmount.value || 0);
+  const price = tokenCache.priceUsd;
+  if(!amt || amt <= 0 || !price){
+    usdEstimate.textContent = "$0.00";
+    usdHint.textContent = price ? "Enter amount" : "Price unavailable (DexScreener)";
+    return;
+  }
+  const est = amt * price;
+  usdEstimate.textContent = est.toLocaleString(undefined, { style:"currency", currency:"USD" });
+  usdHint.textContent = `≈ ${amt} ${tokenCache.symbol} @ $${price}`;
+}
 
-  if (!account) throw new Error("Connect wallet first.");
-  if (!ethers.utils.isAddress(splitterAddr)) throw new Error("Invalid splitter address.");
-  if (!ethers.utils.isAddress(tokenAddr)) throw new Error("Invalid token address.");
-  if (!amountStr) throw new Error("Enter amount.");
+/* ========= APPROVE + SPLIT ========= */
+function validateSplitInputs(){
+  const token = (tokenAddress.value || "").trim();
+  if(!isAddr(token)) return { ok:false, msg:"Invalid token address." };
 
-  const total = updateTotal();
-  if (total !== 100) throw new Error(`Recipient total must be 100%. Current: ${total}%`);
+  const amt = tokenAmount.value;
+  if(!amt || Number(amt) <= 0) return { ok:false, msg:"Enter an amount > 0." };
 
-  const recs = rows();
-  if (recs.length < 1) throw new Error("Add at least 1 recipient.");
+  const rows = getRecipientRows();
+  if(rows.length < 1) return { ok:false, msg:"Add at least 1 recipient." };
 
-  const accounts = [];
-  const shares = [];
-  for (const r of recs){
-    if (!ethers.utils.isAddress(r.addr)) throw new Error(`Bad recipient address: ${r.addr}`);
-    if (!Number.isFinite(r.pct) || r.pct <= 0) throw new Error("Each recipient percent must be > 0.");
-    accounts.push(r.addr);
-    shares.push(Math.round(r.pct));
+  const recipients = [];
+  const percents = [];
+  for(const r of rows){
+    const a = (r.querySelector(".addr").value || "").trim();
+    const p = Number(r.querySelector(".pct").value || 0);
+
+    if(!isAddr(a)) return { ok:false, msg:"One of the recipient addresses is invalid." };
+    if(p <= 0) return { ok:false, msg:"Each recipient must have a percent > 0." };
+
+    recipients.push(a);
+    percents.push(p);
   }
 
-  const amount = ethers.utils.parseUnits(amountStr, tokenMeta.decimals);
-  return { splitterAddr, tokenAddr, accounts, shares, amount };
+  const total = percents.reduce((x,y)=>x+y,0);
+  if(total !== 100) return { ok:false, msg:`Total percent must equal 100. Current: ${total}.` };
+
+  return { ok:true, token, amt: String(amt), recipients, percents };
 }
 
 async function approve(){
-  setWarn("");
+  if(!signer) return alert("Connect wallet first.");
+  const v = validateSplitInputs();
+  if(!v.ok) return alert(v.msg);
+
   try{
-    await ensureBsc();
-    const { splitterAddr, tokenAddr, amount } = buildArrays();
+    approveBtn.disabled = true;
+    approveBtn.textContent = "APPROVING…";
 
-    const token = new ethers.Contract(tokenAddr, ERC20_ABI, signer);
-    const alw = await token.allowance(account, splitterAddr);
-    if (alw.gte(amount)){
-      setWarn("Allowance already sufficient. You can EXECUTE SPLIT.");
-      return;
-    }
+    const token = new ethers.Contract(v.token, ERC20_ABI, signer);
+    const amountWei = ethers.utils.parseUnits(v.amt, tokenCache.decimals);
 
-    log("Sending approve…");
-    const tx = await token.approve(splitterAddr, amount);
-    setWarn(`Approve sent: ${tx.hash}`);
+    // Approve EXACT amount (simple + safe)
+    const tx = await token.approve(currentChain.splitter, amountWei);
+    log(`Approve sent: ${tx.hash}`, "info");
     await tx.wait();
-    setWarn("Approve confirmed. Now EXECUTE SPLIT.");
-    await refreshTokenPanels();
+    log("Approve confirmed.", "ok");
+    alert("Approve confirmed.");
   }catch(e){
-    setWarn(e?.message || String(e));
+    log(`Approve failed: ${e.message || e}`, "err");
+    alert(`Approve failed: ${e.message || e}`);
+  }finally{
+    approveBtn.disabled = false;
+    approveBtn.textContent = "APPROVE";
   }
 }
 
 async function executeSplit(){
-  setWarn("");
+  if(!signer) return alert("Connect wallet first.");
+  const v = validateSplitInputs();
+  if(!v.ok) return alert(v.msg);
+
   try{
-    await ensureBsc();
-    const { splitterAddr, tokenAddr, accounts, shares, amount } = buildArrays();
+    splitBtn.disabled = true;
+    splitBtn.textContent = "EXECUTING…";
 
-    const splitter = new ethers.Contract(splitterAddr, SPLITTER_ABI, signer);
-    log("Executing split…");
-    const tx = await splitter.depositAndDistribute(tokenAddr, accounts, shares, amount);
+    const amountWei = ethers.utils.parseUnits(v.amt, tokenCache.decimals);
 
-    const receiptBox = $("receipt");
-    const receiptText = $("receiptText");
-    const txLink = $("txLink");
+    const splitter = new ethers.Contract(currentChain.splitter, SPLITTER_ABI, signer);
 
-    receiptBox.hidden = false;
-    txLink.style.display = "inline-flex";
-    txLink.href = `https://bscscan.com/tx/${tx.hash}`;
-
-    const amtHuman = ethers.utils.formatUnits(amount, tokenMeta.decimals);
-    const lines = [];
-    lines.push("ZEPHENHEL CITADEL — RECEIPT");
-    lines.push("──────────────────────────");
-    lines.push(`TX: ${tx.hash}`);
-    lines.push(`Splitter: ${splitterAddr}`);
-    lines.push(`Token: ${tokenAddr} (${tokenMeta.symbol})`);
-    lines.push(`Amount: ${amtHuman}`);
-    if (tokenMeta.priceUsd){
-      const est = Number(amtHuman) * tokenMeta.priceUsd;
-      if (Number.isFinite(est)) lines.push(`USD Estimate: $${est.toLocaleString(undefined,{maximumFractionDigits:2})}`);
-    }
-    lines.push("Fee: 1% (enforced by splitter contract)");
-    lines.push("Recipients:");
-    accounts.forEach((a,i)=> lines.push(` ${i+1}. ${a} — ${shares[i]}%`));
-    lines.push(`Time: ${new Date().toLocaleString()}`);
-
-    receiptText.textContent = lines.join("\n");
-
-    setWarn(`Split sent: ${tx.hash}`);
+    // If your splitter uses a different function name/signature,
+    // change SPLIT_FN + SPLITTER_ABI at the top.
+    const tx = await splitter[SPLIT_FN](v.token, amountWei, v.recipients, v.percents);
+    log(`Split sent: ${tx.hash}`, "info");
     await tx.wait();
-    setWarn("Split confirmed ✅");
-    await refreshTokenPanels();
+    log("Split confirmed.", "ok");
+    alert("Split confirmed.");
   }catch(e){
-    setWarn(e?.message || String(e));
+    log(`Split failed: ${e.message || e}`, "err");
+    alert(`Split failed: ${e.message || e}`);
+  }finally{
+    splitBtn.disabled = false;
+    splitBtn.textContent = "EXECUTE SPLIT";
   }
 }
 
-function copyReceipt(){
-  const t = $("receiptText").textContent || "";
-  if (!t) return;
-  navigator.clipboard.writeText(t).then(()=> setWarn("Receipt copied.")).catch(()=> setWarn("Clipboard blocked."));
+/* ========= INIT ========= */
+function setChain(key){
+  currentChain = CHAINS[key];
+  splitterAddress.value = currentChain.splitter;
+  log(`Network set: ${currentChain.name}`, "info");
+  tokenCache.address = null; // force refresh
+  refreshTokenMeta();
 }
 
-function boot(){
-  // hard fail visibility
-  window.addEventListener("error", (e) => {
-    setWarn("Runtime error: " + (e?.message || "unknown"));
+function init(){
+  // default recipients (you can remove these anytime)
+  addRecipientRow("", "");
+  addRecipientRow("", "");
+
+  setChain(networkSelect.value);
+
+  networkSelect.addEventListener("change", async () => {
+    setChain(networkSelect.value);
+
+    // if already connected, switch chain immediately
+    if(userAddress){
+      connectBtn.disabled = false;
+      connectBtn.textContent = "CONNECT";
+      setWalletStatus("Disconnected", false);
+      provider = null; signer = null; userAddress = null;
+      await connect();
+    }
   });
 
-  $("splitter").value = SPLITTER_DEFAULT_BSC;
+  connectBtn.addEventListener("click", connect);
+  addRecipientBtn.addEventListener("click", () => addRecipientRow("", ""));
+  approveBtn.addEventListener("click", approve);
+  splitBtn.addEventListener("click", executeSplit);
 
-  // Start with 2 rows so you SEE it’s alive
-  addRow("", "50");
-  addRow("", "50");
+  tokenAddress.addEventListener("input", () => refreshTokenMeta());
+  tokenAmount.addEventListener("input", () => updateUsdEstimate());
 
-  $("connectBtn").addEventListener("click", connect);
-  $("switchBtn").addEventListener("click", async () => { try { await ensureBsc(); } catch(e){ setWarn(e?.message||String(e)); }});
-  $("addBtn").addEventListener("click", () => addRow("", ""));
-  $("approveBtn").addEventListener("click", approve);
-  $("splitBtn").addEventListener("click", executeSplit);
-  $("copyBtn").addEventListener("click", copyReceipt);
-  $("clearLog").addEventListener("click", () => { $("log").textContent=""; });
+  clearLogBtn.addEventListener("click", () => logBox.textContent = "");
 
-  $("token").addEventListener("change", refreshTokenPanels);
-  $("amount").addEventListener("input", updateUsd);
-  $("splitter").addEventListener("change", refreshTokenPanels);
+  splitterAddress.value = currentChain.splitter;
 
-  setMmChip();
-  setNetChip(null);
-  setAcctChip(null);
-  log("Citadel online. Waiting for CONNECT.");
-
-  if (window.ethereum){
-    window.ethereum.on("accountsChanged", (accs) => {
-      account = accs?.[0] || null;
-      setAcctChip(account);
-      log("Account changed.");
-      refreshTokenPanels();
-    });
-    window.ethereum.on("chainChanged", (cid) => {
-      setNetChip(cid);
-      log("Chain changed: " + cid);
-      refreshTokenPanels();
-    });
-  }
+  log("Boot complete. Select network → Connect → Paste token → Set recipients → Approve → Execute.", "ok");
 }
 
-document.addEventListener("DOMContentLoaded", boot);
+init();
