@@ -1,158 +1,125 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>ZEPHENHEL CITADEL</title>
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <div class="mark">Z</div>
-      <div class="brandtext">
-        <div class="title">ZEPHENHEL CITADEL</div>
-        <div class="subtitle">Mythic tri-chain splitter • BSC • Ethereum • Polygon</div>
+      <div class="brand-badge">Z</div>
+      <div>
+        <div class="brand-title">ZEPHENHEL CITADEL</div>
+        <div class="brand-sub">Mythic tri-chain splitter • BSC • Ethereum • Polygon</div>
       </div>
     </div>
 
-    <div class="top-actions">
-      <div class="pill" id="netPill">Network: —</div>
-      <div class="pill" id="acctPill">Wallet: Disconnected</div>
-      <button class="btn gold" id="connectBtn">Connect</button>
-      <button class="btn ghost" id="switchBtn" title="Switch to the selected network">Switch Network</button>
+    <div class="pillrow">
+      <div id="netPill" class="pill">Network: —</div>
+      <div id="acctPill" class="pill">Wallet: Disconnected</div>
+      <button id="connectBtn" class="btn gold">Connect</button>
+      <button id="switchBtn" class="btn">Switch Network</button>
     </div>
   </header>
 
   <main class="wrap">
-    <section class="grid">
-      <!-- LEFT: Split panel -->
-      <div class="card">
-        <div class="card-h">
-          <div>
-            <div class="card-title">Distribution Command</div>
-            <div class="card-sub">Enter <b>simple percentages</b> (must total 100). Citadel auto-adjusts for the fee.</div>
-          </div>
-          <div class="fee-chip">platform fee <span class="tiny">1%</span></div>
-        </div>
+    <div class="grid">
+      <section class="card">
+        <div class="card-h">Command</div>
+
+        <label class="lbl">Select network</label>
+        <select id="networkSel" class="in">
+          <option value="bsc">BSC Mainnet</option>
+          <option value="eth">Ethereum Mainnet</option>
+          <option value="polygon">Polygon Mainnet</option>
+        </select>
+
+        <label class="lbl">Token address (ERC20 / BEP20) — leave blank for native coin</label>
+        <input id="tokenAddr" class="in" placeholder="0x…" />
 
         <div class="row">
-          <label class="lab">Network</label>
-          <select id="networkSel" class="in">
-            <option value="bsc">BSC Mainnet</option>
-            <option value="eth">Ethereum Mainnet</option>
-            <option value="polygon">Polygon Mainnet</option>
-          </select>
-        </div>
-
-        <div class="row">
-          <label class="lab">Token address (ERC20 / BEP20)</label>
-          <input id="tokenAddr" class="in" placeholder="0x... (leave blank to split native coin)" />
-        </div>
-
-        <div class="row two">
-          <div>
-            <label class="lab">Amount</label>
-            <div class="inwrap">
-              <input id="amount" class="in" placeholder="0.0" inputmode="decimal" />
-              <button class="btn mini" id="maxBtn" type="button">MAX</button>
-            </div>
-            <div class="hint" id="gasHint">MAX reserves gas automatically.</div>
+          <div class="col">
+            <label class="lbl">Amount</label>
+            <input id="amount" class="in" placeholder="0.0" inputmode="decimal" />
+            <div id="gasHint" class="hint"></div>
           </div>
-          <div class="statbox">
-            <div class="stat">
-              <div class="k">USD estimate</div>
-              <div class="v" id="usdEst">—</div>
-            </div>
-            <div class="stat">
-              <div class="k">You receive (post-fee)</div>
-              <div class="v" id="postFeeAmt">—</div>
+          <div class="col right">
+            <button id="maxBtn" class="btn">MAX</button>
+            <div class="mini">
+              <div class="mini-h">USD estimate</div>
+              <div id="usdEst" class="mini-v">—</div>
+              <div class="mini-h">You receive (post-fee est)</div>
+              <div id="postFeeAmt" class="mini-v">—</div>
+              <div class="mini-h tiny">Platform fee: <span class="tiny">1%</span></div>
             </div>
           </div>
         </div>
 
-        <div class="divider"></div>
+        <div class="split"></div>
 
-        <div class="rec-h">
-          <div class="card-title">Recipients</div>
-          <div class="rec-tools">
-            <div class="pill" id="totalPill">Total: 0%</div>
-            <button class="btn mini ghost" id="addRecBtn" type="button">+ Add</button>
+        <div class="row between">
+          <div class="card-h">Recipients</div>
+          <div class="pillrow">
+            <div id="totalPill" class="pill">Total: 0%</div>
+            <button id="addRecBtn" class="btn">+ Add</button>
           </div>
         </div>
 
         <div id="recList" class="recList"></div>
 
-        <div class="actions">
-          <button class="btn ghost" id="approveBtn">Approve</button>
-          <button class="btn gold" id="splitBtn">Execute Split</button>
+        <div class="row">
+          <button id="approveBtn" class="btn">Approve</button>
+          <button id="splitBtn" class="btn gold">Execute Split</button>
         </div>
 
-        <div class="note" id="adjustNote">
-          Tip: If your splitter expects 99% totals due to the 1% fee, Citadel will automatically send the correct shares.
+        <div id="errBox" class="err" hidden></div>
+        <div class="hint">
+          Tip: Citadel will try multiple execution modes (fee-adjust + percent scaling + gas fallbacks) until one succeeds.
+        </div>
+      </section>
+
+      <aside class="card">
+        <div class="row between">
+          <div class="card-h">Live status</div>
+          <button id="liveBtn" class="btn">Refresh</button>
         </div>
 
-        <div class="err" id="errBox" hidden></div>
-      </div>
+        <div class="kv">
+          <div class="k">Wallet balance</div>
+          <div id="walletBal" class="v">—</div>
 
-      <!-- RIGHT: Info + Log -->
-      <div class="card">
-        <div class="card-h">
-          <div>
-            <div class="card-title">Token & Wallet Intel</div>
-            <div class="card-sub">Live balance, token metadata, allowance, and the active splitter contract.</div>
-          </div>
-          <button class="btn mini ghost" id="liveBtn" type="button">Refresh</button>
+          <div class="k">Token symbol</div>
+          <div id="tokSym" class="v">—</div>
+
+          <div class="k">Decimals</div>
+          <div id="tokDec" class="v">—</div>
+
+          <div class="k">Token balance</div>
+          <div id="tokBal" class="v">—</div>
+
+          <div class="k">Allowance → splitter</div>
+          <div id="allow" class="v">—</div>
+
+          <div class="k">Active splitter contract</div>
+          <div id="splitterAddr" class="v mono">—</div>
         </div>
 
-        <div class="intel">
-          <div class="intelItem">
-            <div class="k">Wallet balance</div>
-            <div class="v" id="walletBal">—</div>
-          </div>
-          <div class="intelItem">
-            <div class="k">Token symbol</div>
-            <div class="v" id="tokSym">—</div>
-          </div>
-          <div class="intelItem">
-            <div class="k">Decimals</div>
-            <div class="v" id="tokDec">—</div>
-          </div>
-          <div class="intelItem">
-            <div class="k">Token balance</div>
-            <div class="v" id="tokBal">—</div>
-          </div>
-          <div class="intelItem">
-            <div class="k">Allowance → splitter</div>
-            <div class="v" id="allow">—</div>
-          </div>
-          <div class="intelItem wide">
-            <div class="k">Active splitter contract</div>
-            <div class="v mono" id="splitterAddr">—</div>
+        <div class="row between">
+          <div class="card-h">Runtime log</div>
+          <div class="pillrow">
+            <label class="chk"><input id="soundToggle" type="checkbox" checked /> Sound FX</label>
+            <button id="clearLogBtn" class="btn">Clear</button>
           </div>
         </div>
-
-        <div class="divider"></div>
-
-        <div class="log-h">
-          <div class="card-title">Runtime Log</div>
-          <div class="log-tools">
-            <label class="chk">
-              <input type="checkbox" id="soundToggle" checked />
-              <span>Sound FX</span>
-            </label>
-            <button class="btn mini ghost" id="clearLogBtn" type="button">Clear</button>
-          </div>
-        </div>
-        <pre class="log" id="log"></pre>
-
-        <div class="footnote">Always test small amounts first.</div>
-      </div>
-    </section>
+        <pre id="log" class="log"></pre>
+        <div class="hint center">Always test small amounts first.</div>
+      </aside>
+    </div>
   </main>
 
-  <!-- ethers v5 -->
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  <script src="./app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
