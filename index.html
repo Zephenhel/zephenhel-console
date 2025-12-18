@@ -1,102 +1,64 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8" />
   <title>ZEPHENHEL CITADEL</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
 </head>
 
 <body>
-  <div class="bg"></div>
+  <audio id="radarSound" src="https://assets.mixkit.co/sfx/preview/mixkit-radar-digital-beep-2816.mp3"></audio>
+  <audio id="coinSound" src="https://assets.mixkit.co/sfx/preview/mixkit-coins-handling-1939.mp3"></audio>
 
-  <header class="topbar">
-    <div class="brand">
-      <div class="brand-title">ZEPHENHEL CITADEL</div>
-      <div class="brand-sub">Tri-Chain Splitter • Mythic Distribution Command</div>
-    </div>
+  <div class="citadel">
+    <header>
+      <h1>ZEPHENHEL CITADEL</h1>
+      <p class="subtitle">Mythic Tri-Chain Distribution Command</p>
+    </header>
 
-    <div class="status">
-      <div class="pill" id="chainPill">Chain: —</div>
-      <div class="pill" id="splitterPill">Splitter: —</div>
-      <button class="btn" id="connectBtn">CONNECT WALLET</button>
-      <button class="btn btn-ghost" id="switchBtn" title="Switch chain in MetaMask">SWITCH CHAIN</button>
-    </div>
-  </header>
-
-  <main class="grid">
-    <section class="card">
-      <div class="card-title">CONTROL PANEL</div>
-
-      <div class="kv">
-        <div class="k">Wallet</div>
-        <div class="v" id="walletLine">Disconnected</div>
-
-        <div class="k">Native Balance</div>
-        <div class="v" id="nativeBalLine">—</div>
-      </div>
-
-      <div class="divider"></div>
-
-      <label class="label">Token Address (ERC20 / BEP20)</label>
-      <input id="tokenAddress" class="input" placeholder="0x… token contract address" autocomplete="off" />
-
-      <div class="row2">
-        <div>
-          <div class="label">Amount</div>
-          <div class="amountRow">
-            <input id="amount" class="input" type="number" step="any" placeholder="0.0" />
-            <button id="maxBtn" class="btn btn-ghost" type="button">MAX</button>
-          </div>
-          <div class="hint" id="amountHint">Tip: MAX uses token balance (gas is paid in native coin).</div>
-        </div>
-
-        <div class="tokenInfo">
-          <div class="label">Token Info</div>
-          <div class="mono" id="tokenMeta">—</div>
-          <div class="mono" id="tokenBal">—</div>
-          <div class="mono" id="usdLine">≈ $—</div>
-          <div class="tiny">Platform fee: <span class="tinyGold">1%</span></div>
-        </div>
-      </div>
-
-      <div class="divider"></div>
-
-      <div class="actions">
-        <button class="btn" id="approveBtn">APPROVE</button>
-        <button class="btn btn-gold" id="splitBtn">EXECUTE SPLIT</button>
-      </div>
-
-      <div class="warn" id="warnBox" style="display:none;"></div>
+    <section class="status">
+      <div id="chainBadge">CHAIN: —</div>
+      <div id="walletBadge">WALLET: DISCONNECTED</div>
+      <button id="connectBtn">CONNECT</button>
     </section>
 
-    <section class="card">
-      <div class="card-title">RECIPIENTS</div>
+    <section class="panel">
+      <label>Token Address</label>
+      <input id="tokenAddress" placeholder="0x…" />
 
-      <div class="recipientHead">
-        <div>Address</div>
-        <div>%</div>
-        <div></div>
+      <label>Amount</label>
+      <div class="amountRow">
+        <input id="amountInput" type="number" placeholder="0.0" />
+        <button id="maxBtn">MAX</button>
       </div>
 
+      <div class="infoRow">
+        <span id="balanceLabel">Balance: —</span>
+        <span id="usdLabel">≈ $0.00</span>
+      </div>
+      <div class="feeNote">Platform fee: <span>1%</span></div>
+    </section>
+
+    <section class="panel">
+      <h2>Recipients</h2>
       <div id="recipients"></div>
-
-      <div class="recipientFooter">
-        <div class="pill">Total: <span id="totalPct">0</span>%</div>
-        <button class="btn btn-ghost" id="addRecipientBtn">+ ADD RECIPIENT</button>
-      </div>
-
-      <div class="hint">Total percent must equal <b>100%</b>.</div>
+      <button id="addRecipient">+ ADD RECIPIENT</button>
+      <div class="total">TOTAL: <span id="totalPercent">0</span>%</div>
     </section>
 
-    <section class="card logCard">
-      <div class="card-title">RUNTIME LOG</div>
-      <pre id="log"></pre>
+    <section class="actions">
+      <button id="approveBtn">APPROVE</button>
+      <button id="executeBtn">EXECUTE SPLIT</button>
     </section>
-  </main>
 
-  <!-- ethers v5 -->
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <section class="log">
+      <h3>Runtime Log</h3>
+      <pre id="logBox"></pre>
+    </section>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
