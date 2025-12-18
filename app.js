@@ -1,7 +1,6 @@
 /* global ethers */
 
 (() => {
-  // ====== YOUR SPLITTERS (as provided) ======
   const SPLITTERS = {
     bsc: "0x928B75D0fA6382D4B742afB6e500C9458B4f502c",
     eth: "0x56FeE96eF295Cf282490592403B9A3C1304b91d2",
@@ -14,11 +13,11 @@
     polygon: { chainId: 137, hex: "0x89", name: "Polygon", native: "MATIC", gasReserve: "0.02" }
   };
 
-  // ====== IMPORTANT: Your splitters expect BASIS POINTS ======
-  // user types 50/50 -> we send 5000/5000. Sum must be 10000.
-  const BPS_TOTAL = 10000;
+  // Try BOTH totals:
+  // - 10000 bps = classic basis points
+  // - 9900 bps = “1% fee reserved” style
+  const TOTAL_CANDIDATES = [10000, 9900];
 
-  // ====== ABIs ======
   const ERC20_ABI = [
     "function symbol() view returns (string)",
     "function decimals() view returns (uint8)",
@@ -27,13 +26,11 @@
     "function approve(address spender,uint256 amount) returns (bool)"
   ];
 
-  // Keep the same function names you were using successfully earlier:
   const SPLITTER_ABI = [
     "function splitToken(address token,uint256 amount,address[] recipients,uint256[] percents) external",
     "function splitNative(address[] recipients,uint256[] percents) external payable"
   ];
 
-  // ====== DOM ======
   const $ = (id) => document.getElementById(id);
 
   const netPill = $("netPill");
@@ -70,7 +67,6 @@
   const gasHint = $("gasHint");
   const soundToggle = $("soundToggle");
 
-  // ====== State ======
   let provider, signer;
   let account = null;
   let currentNetKey = "bsc";
@@ -85,7 +81,6 @@
     { addr: "", pct: 50 }
   ];
 
-  // ====== Sound FX (WebAudio) ======
   function playPing() {
     if (!soundToggle?.checked) return;
     try {
@@ -132,7 +127,6 @@
     tick();
   }
 
-  // ====== Helpers ======
   function log(msg) {
     const t = new Date().toLocaleTimeString();
     logEl.textContent += `[${t}] ${msg}\n`;
@@ -190,20 +184,23 @@
   }
 
   function prettyRpcError(e) {
-    // dig out the real revert reason when possible
     const msg =
       e?.error?.message ||
       e?.data?.message ||
       e?.reason ||
       e?.message ||
       String(e);
-
-    // shorten but keep the useful part
     const cleaned = msg.replace(/\s+/g, " ").trim();
-    return cleaned.length > 220 ? cleaned.slice(0, 220) + "…" : cleaned;
+    return cleaned.length > 260 ? cleaned.slice(0, 260) + "…" : cleaned;
   }
 
-  // ====== Recipients UI ======
+  function mustBeOnSelectedChain() {
+    const expected = CHAIN[currentNetKey].chainId;
+    if (activeChainId !== expected) {
+      throw new Error(`Wrong network. You are on chainId ${activeChainId}, but ${CHAIN[currentNetKey].name} is chainId ${expected}. Click Switch Network.`);
+    }
+  }
+
   function renderRecipients() {
     recList.innerHTML = "";
     recipients.forEach((r, idx) => {
@@ -256,19 +253,16 @@
     if (bad) throw new Error("One or more recipient addresses are invalid.");
   }
 
-  // ====== Percent conversion (THIS is the key fix) ======
-  function buildBasisPointsArray() {
-    // user must total 100%
+  // Build basis-points array for a given requiredTotal (10000 or 9900)
+  function buildBpsForTotal(requiredTotal) {
     const pcts = recipients.map(r => Number(r.pct) || 0);
     const total = pcts.reduce((a, b) => a + b, 0);
     if (Math.abs(total - 100) > 0.0001) throw new Error("Total percent must equal 100.");
 
-    // convert to bps and ensure sum==10000 via remainder fix
-    const raw = pcts.map(p => Math.floor((p / 100) * BPS_TOTAL));
+    const raw = pcts.map(p => Math.floor((p / 100) * requiredTotal));
     let sum = raw.reduce((a, b) => a + b, 0);
-    let rem = BPS_TOTAL - sum;
+    let rem = requiredTotal - sum;
 
-    // add remainder to highest percents first
     const order = pcts.map((p, i) => ({ p, i })).sort((a, b) => b.p - a.p);
     let k = 0;
     while (rem > 0) {
@@ -279,7 +273,6 @@
     return raw.map(x => ethers.BigNumber.from(x));
   }
 
-  // ====== DexScreener USD ======
   async function fetchDexPriceUSD(tokenAddress) {
     try {
       const url = `https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`;
@@ -301,12 +294,10 @@
     }
   }
 
-  // ====== Token + wallet intel ======
   async function refreshTokenAndWallet() {
     if (!provider) return;
     setTopPills();
     setGasHint();
-
     if (!account) return;
 
     const bal = await provider.getBalance(account);
@@ -358,15 +349,11 @@
       postFeeAmtEl.textContent = "—";
       return;
     }
-
-    // We DO NOT subtract fee here (contract handles it)
     postFeeAmtEl.textContent = `${amt} ${tokenMeta.symbol}`;
-
     if (tokenPriceUSD) usdEstEl.textContent = `$${(amt * tokenPriceUSD).toFixed(2)}`;
     else usdEstEl.textContent = "—";
   }
 
-  // ====== MetaMask connect / switch ======
   async function ensureProvider() {
     if (!window.ethereum) {
       showError("MetaMask not detected. Install/enable MetaMask extension, then refresh.");
@@ -384,6 +371,7 @@
     try {
       const accts = await provider.send("eth_requestAccounts", []);
       account = accts?.[0] || null;
+
       const net = await provider.getNetwork();
       activeChainId = net.chainId;
 
@@ -414,18 +402,17 @@
         params: [{ chainId: target.hex }]
       });
       log(`Switched to ${target.name}`);
-      // reload for a clean provider state
       window.location.reload();
     } catch (e) {
       showError(`Switch failed: ${prettyRpcError(e)}`);
     }
   }
 
-  // ====== MAX for native (reserve gas) ======
   async function setMax() {
     clearError();
     try {
       if (!account) throw new Error("Connect wallet first.");
+      mustBeOnSelectedChain();
       if (!tokenIsNative()) throw new Error("MAX is for native coin only (leave token address blank).");
 
       const bal = await provider.getBalance(account);
@@ -439,11 +426,11 @@
     }
   }
 
-  // ====== Approve ======
   async function approve() {
     clearError();
     try {
       if (!account) throw new Error("Connect wallet first.");
+      mustBeOnSelectedChain();
       if (tokenIsNative()) throw new Error("Approve is not needed for native coin.");
       if (!token) throw new Error("Enter a valid token address first.");
 
@@ -464,11 +451,34 @@
     }
   }
 
-  // ====== Split (basis points only) ======
+  // Try candidates (10000 then 9900). Use whichever passes callStatic.
+  async function pickWorkingBps(splitter, recAddrs, amountBN) {
+    for (const total of TOTAL_CANDIDATES) {
+      const bps = buildBpsForTotal(total);
+
+      try {
+        log(`Preflight callStatic (total=${total})…`);
+        if (tokenIsNative()) {
+          await splitter.callStatic.splitNative(recAddrs, bps, { value: amountBN });
+        } else {
+          await splitter.callStatic.splitToken(token.address, amountBN, recAddrs, bps);
+        }
+        log(`Preflight OK ✅ (total=${total})`);
+        return { bps, total };
+      } catch (e) {
+        const m = prettyRpcError(e);
+        log(`Preflight failed (total=${total}): ${m}`);
+        // keep trying next candidate
+      }
+    }
+    throw new Error("Splitter rejected both percent totals (10000 and 9900). Contract rules differ or recipients/amount invalid.");
+  }
+
   async function split() {
     clearError();
     try {
       if (!account) throw new Error("Connect wallet first.");
+      mustBeOnSelectedChain();
       validateRecipients();
 
       const amt = toFloatSafe(amountIn.value);
@@ -476,9 +486,7 @@
 
       const splitter = currentSplitter();
       const recAddrs = recipients.map(r => r.addr);
-      const bps = buildBasisPointsArray(); // sum == 10000 always
 
-      // amount
       let amountBN;
       if (tokenIsNative()) amountBN = ethers.utils.parseEther(String(amt));
       else {
@@ -486,30 +494,23 @@
         amountBN = ethers.utils.parseUnits(String(amt), tokenMeta.decimals);
       }
 
-      // preflight (this gives you REAL revert reasons if it fails)
-      log(`Preflight callStatic… (bps sum=${bps.reduce((a,b)=>a.add(b),ethers.BigNumber.from(0)).toString()})`);
-      if (tokenIsNative()) {
-        await splitter.callStatic.splitNative(recAddrs, bps, { value: amountBN });
-      } else {
-        await splitter.callStatic.splitToken(token.address, amountBN, recAddrs, bps);
-      }
-      log(`Preflight OK ✅`);
+      // Detect which total the deployed contract wants (10000 or 9900)
+      const { bps, total } = await pickWorkingBps(splitter, recAddrs, amountBN);
 
       playCoins(recipients.length);
 
-      // execute with a gas buffer
       if (tokenIsNative()) {
         const est = await splitter.estimateGas.splitNative(recAddrs, bps, { value: amountBN });
-        const gasLimit = est.mul(120).div(100);
-        log(`Executing native split… gasLimit=${gasLimit.toString()}`);
+        const gasLimit = est.mul(130).div(100);
+        log(`Executing native split… total=${total} gasLimit=${gasLimit.toString()}`);
         const tx = await splitter.splitNative(recAddrs, bps, { value: amountBN, gasLimit });
         log(`Split tx: ${tx.hash}`);
         await tx.wait();
         log(`Split complete ✅`);
       } else {
         const est = await splitter.estimateGas.splitToken(token.address, amountBN, recAddrs, bps);
-        const gasLimit = est.mul(120).div(100);
-        log(`Executing token split… gasLimit=${gasLimit.toString()}`);
+        const gasLimit = est.mul(130).div(100);
+        log(`Executing token split… total=${total} gasLimit=${gasLimit.toString()}`);
         const tx = await splitter.splitToken(token.address, amountBN, recAddrs, bps, { gasLimit });
         log(`Split tx: ${tx.hash}`);
         await tx.wait();
@@ -524,7 +525,6 @@
     }
   }
 
-  // ====== Wiring ======
   function wire() {
     renderRecipients();
     updateTotal();
@@ -571,5 +571,5 @@
   }
 
   wire();
-  log("ZEPHENHEL CITADEL ready. Basis-points mode (10000) enabled.");
+  log("ZEPHENHEL CITADEL ready. Auto-detecting splitter total: 10000 or 9900.");
 })();
