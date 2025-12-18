@@ -5,24 +5,23 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>ZEPHENHEL CITADEL — Tri-Chain Splitter</title>
   <link rel="stylesheet" href="styles.css" />
-
-  <!-- Ethers v5 (works well with window.ethereum / MetaMask) -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 </head>
 
 <body>
-  <div class="bg-orb orb1"></div>
-  <div class="bg-orb orb2"></div>
+  <div class="bg-grid"></div>
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
 
   <header class="topbar">
     <div class="brand">
-      <div class="brand-title">ZEPHENHEL CITADEL</div>
-      <div class="brand-sub">Tri-Chain Distribution Console • Mythic Black + Gold</div>
+      <div class="brand__title">ZEPHENHEL CITADEL</div>
+      <div class="brand__sub">Mythic Tri-Chain Distribution • Black + Gold • Tactical Grade</div>
     </div>
 
-    <div class="statusbar">
+    <div class="topbar__right">
       <div class="pill">
-        <span class="label">NETWORK</span>
+        <span class="pill__label">NETWORK</span>
         <select id="networkSelect" class="select">
           <option value="BSC">BSC</option>
           <option value="ETH">Ethereum</option>
@@ -30,84 +29,131 @@
         </select>
       </div>
 
-      <div class="pill">
-        <span class="label">WALLET</span>
-        <span id="walletStatus" class="value">Disconnected</span>
-      </div>
-
-      <button id="connectBtn" class="btn btn-primary">CONNECT</button>
+      <button id="connectBtn" class="btn btn-gold">CONNECT WALLET</button>
     </div>
   </header>
 
-  <main class="layout">
-    <section class="panel">
-      <div class="panel-head">
-        <h2>Splitter Command</h2>
-        <div class="tiny">Platform fee: <span class="fee">1%</span> (applies on execution)</div>
+  <main class="wrap">
+    <!-- Left column -->
+    <section class="card">
+      <div class="card__head">
+        <div>
+          <div class="card__title">Citadel Control Panel</div>
+          <div class="card__meta">
+            Wallet: <span id="walletStatus" class="mono dim">Disconnected</span>
+            <span class="dot"></span>
+            Splitter: <span id="splitterShort" class="mono dim">—</span>
+            <span class="dot"></span>
+            <span class="tiny">platform fee <span class="fee">1%</span></span>
+          </div>
+        </div>
+
+        <div class="headActions">
+          <button id="switchBtn" class="btn btn-ghost">SWITCH TO CHAIN</button>
+          <button id="visitDexBtn" class="btn btn-ghost">DEXSCREENER</button>
+        </div>
       </div>
 
-      <div class="grid2">
-        <div class="field">
+      <div class="grid">
+        <div class="field span2">
           <label>Splitter Contract (auto)</label>
           <input id="splitterAddress" class="input mono" type="text" readonly />
         </div>
 
-        <div class="field">
-          <label>Token Contract (ERC20 / BEP20)</label>
+        <div class="field span2">
+          <label>Token Contract (ERC20/BEP20)</label>
           <input id="tokenAddress" class="input mono" type="text" placeholder="0x..." />
         </div>
 
         <div class="field">
-          <label>Amount (token units)</label>
+          <label>Amount (token)</label>
           <input id="tokenAmount" class="input" type="number" step="any" placeholder="0.0" />
-          <div class="hint" id="tokenMeta">Token — Decimals — Price —</div>
+          <div class="hint" id="usdEstimate">$0.00</div>
         </div>
 
         <div class="field">
-          <label>USD Estimate</label>
-          <div class="estimate">
-            <div class="est-main" id="usdEstimate">$0.00</div>
-            <div class="est-sub" id="usdHint">Enter token + amount</div>
+          <label>Token Intel</label>
+          <div class="intel">
+            <div class="intel__row"><span class="dim">Symbol</span><span id="tokenSymbol" class="mono">—</span></div>
+            <div class="intel__row"><span class="dim">Decimals</span><span id="tokenDecimals" class="mono">—</span></div>
+            <div class="intel__row"><span class="dim">Price</span><span id="tokenPrice" class="mono">—</span></div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Your Balance</label>
+          <div class="intel">
+            <div class="intel__row"><span class="dim">Token</span><span id="tokenBalance" class="mono">—</span></div>
+            <div class="intel__row"><span class="dim">USD</span><span id="tokenBalanceUsd" class="mono">—</span></div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Approval Status</label>
+          <div class="intel">
+            <div class="intel__row"><span class="dim">Allowance</span><span id="allowance" class="mono">—</span></div>
+            <div class="intel__row">
+              <span class="dim">Status</span>
+              <span id="approvalState" class="badge">—</span>
+            </div>
           </div>
         </div>
       </div>
 
       <div class="divider"></div>
 
-      <div class="recipients-head">
-        <h3>Recipients</h3>
-        <div class="totals">
-          <span>Total:</span>
-          <span id="totalPct" class="total">0%</span>
+      <div class="rowHead">
+        <div>
+          <div class="sectionTitle">Recipients</div>
+          <div class="tiny dim">Add addresses + % (must total 100). Use Auto-Fix if needed.</div>
+        </div>
+
+        <div class="rowHead__right">
+          <div class="totalBox">
+            Total: <span id="totalPct" class="total">0%</span>
+          </div>
           <button id="addRecipientBtn" class="btn btn-ghost">+ ADD</button>
         </div>
+      </div>
+
+      <div class="toolbar">
+        <button id="evenSplitBtn" class="btn btn-ghost">EVEN SPLIT</button>
+        <button id="autoFixBtn" class="btn btn-ghost">AUTO-FIX TO 100%</button>
+        <button id="savePresetBtn" class="btn btn-ghost">SAVE PRESET</button>
+        <button id="loadPresetBtn" class="btn btn-ghost">LOAD PRESET</button>
+        <button id="clearRecipientsBtn" class="btn btn-ghost">CLEAR</button>
       </div>
 
       <div id="recipients" class="recipients"></div>
 
       <div class="actions">
-        <button id="approveBtn" class="btn btn-secondary">APPROVE</button>
-        <button id="splitBtn" class="btn btn-primary">EXECUTE SPLIT</button>
+        <button id="approveBtn" class="btn btn-silver">APPROVE</button>
+        <button id="splitBtn" class="btn btn-gold">EXECUTE SPLIT</button>
       </div>
 
-      <div class="footnote">
-        If Connect doesn’t pop MetaMask: make sure MetaMask is enabled for this site and refresh.
+      <div class="foot dim">
+        If MetaMask doesn’t pop up: make sure MetaMask is enabled for this site, then refresh.
       </div>
     </section>
 
-    <aside class="panel logpanel">
-      <div class="panel-head">
-        <h2>Runtime Log</h2>
-        <div class="tiny">Live diagnostics (copy if anything fails)</div>
+    <!-- Right column -->
+    <aside class="card card--right">
+      <div class="card__head">
+        <div>
+          <div class="card__title">Runtime Log</div>
+          <div class="tiny dim">Copy this if anything fails</div>
+        </div>
+        <div class="headActions">
+          <button id="refreshIntelBtn" class="btn btn-ghost">REFRESH INTEL</button>
+          <button id="clearLogBtn" class="btn btn-ghost">CLEAR</button>
+        </div>
       </div>
-      <div id="log" class="log"></div>
-      <div class="log-actions">
-        <button id="clearLogBtn" class="btn btn-ghost">Clear</button>
-      </div>
+
+      <pre id="log" class="log"></pre>
     </aside>
   </main>
 
-  <footer class="footer">
+  <footer class="footer dim">
     Zephenhel © Tactical Financial Infrastructure
   </footer>
 
