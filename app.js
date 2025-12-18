@@ -13,10 +13,14 @@
     polygon: { chainId: 137, hex: "0x89", name: "Polygon", native: "MATIC", gasReserve: "0.02" }
   };
 
-  // Try BOTH totals:
-  // - 10000 bps = classic basis points
-  // - 9900 bps = “1% fee reserved” style
+  // Percent totals to try (basis points)
   const TOTAL_CANDIDATES = [10000, 9900];
+
+  // Fee adjustment tries (false = send exact amount, true = send 99% of amount)
+  const FEE_ADJUST_CANDIDATES = [false, true];
+
+  // Platform fee displayed (frontend only)
+  const PLATFORM_FEE_PCT = 1; // 1%
 
   const ERC20_ABI = [
     "function symbol() view returns (string)",
@@ -94,8 +98,7 @@
       g.gain.exponentialRampToValueAtTime(0.22, ctx.currentTime + 0.02);
       g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
       o.connect(g); g.connect(ctx.destination);
-      o.start();
-      o.stop(ctx.currentTime + 0.25);
+      o.start(); o.stop(ctx.currentTime + 0.25);
       setTimeout(() => ctx.close(), 400);
     } catch {}
   }
@@ -118,8 +121,7 @@
         g.gain.exponentialRampToValueAtTime(0.16, ctx.currentTime + 0.01);
         g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.09);
         o.connect(g); g.connect(ctx.destination);
-        o.start();
-        o.stop(ctx.currentTime + 0.10);
+        o.start(); o.stop(ctx.currentTime + 0.10);
         setTimeout(() => ctx.close(), 200);
       } catch {}
       if (i < hits) setTimeout(tick, 90 + Math.random() * 70);
@@ -191,7 +193,7 @@
       e?.message ||
       String(e);
     const cleaned = msg.replace(/\s+/g, " ").trim();
-    return cleaned.length > 260 ? cleaned.slice(0, 260) + "…" : cleaned;
+    return cleaned.length > 360 ? cleaned.slice(0, 360) + "…" : cleaned;
   }
 
   function mustBeOnSelectedChain() {
@@ -280,18 +282,29 @@
       if (!res.ok) return null;
       const data = await res.json();
       const pairs = Array.isArray(data.pairs) ? data.pairs : [];
-
       const chainName =
         currentNetKey === "bsc" ? "bsc" :
         currentNetKey === "eth" ? "ethereum" :
         "polygon";
-
       const best = pairs.find(p => (p.chainId || "").toLowerCase() === chainName) || pairs[0];
       const px = best?.priceUsd ? Number(best.priceUsd) : null;
       return Number.isFinite(px) ? px : null;
     } catch {
       return null;
     }
+  }
+
+  function updateEstimates() {
+    const amt = toFloatSafe(amountIn.value);
+    if (!(amt > 0)) {
+      usdEstEl.textContent = "—";
+      postFeeAmtEl.textContent = "—";
+      return;
+    }
+    const post = amt * (1 - PLATFORM_FEE_PCT / 100);
+    postFeeAmtEl.textContent = `${post.toFixed(6)} ${tokenMeta.symbol} (post-fee est)`;
+    if (tokenPriceUSD) usdEstEl.textContent = `$${(amt * tokenPriceUSD).toFixed(2)}`;
+    else usdEstEl.textContent = "—";
   }
 
   async function refreshTokenAndWallet() {
@@ -336,22 +349,10 @@
 
       tokenPriceUSD = await fetchDexPriceUSD(tAddr);
       updateEstimates();
-      log(`Token loaded: ${sym} (decimals ${dec}) ${tokenPriceUSD ? `• $${tokenPriceUSD}` : ""}`);
+      log(`Token loaded: ${sym} (decimals ${dec})${tokenPriceUSD ? ` • $${tokenPriceUSD}` : ""}`);
     } catch (e) {
       log(`Token read failed: ${prettyRpcError(e)}`);
     }
-  }
-
-  function updateEstimates() {
-    const amt = toFloatSafe(amountIn.value);
-    if (!(amt > 0)) {
-      usdEstEl.textContent = "—";
-      postFeeAmtEl.textContent = "—";
-      return;
-    }
-    postFeeAmtEl.textContent = `${amt} ${tokenMeta.symbol}`;
-    if (tokenPriceUSD) usdEstEl.textContent = `$${(amt * tokenPriceUSD).toFixed(2)}`;
-    else usdEstEl.textContent = "—";
   }
 
   async function ensureProvider() {
@@ -451,29 +452,20 @@
     }
   }
 
-  // Try candidates (10000 then 9900). Use whichever passes callStatic.
-  async function pickWorkingBps(splitter, recAddrs, amountBN) {
-    for (const total of TOTAL_CANDIDATES) {
-      const bps = buildBpsForTotal(total);
+  // Convert UI amount -> BN, with optional fee adjustment (send 99% if true)
+  function parseAmountBN(uiAmount, feeAdjust) {
+    const amt = Number(uiAmount);
+    if (!(amt > 0)) throw new Error("Enter an amount > 0.");
 
-      try {
-        log(`Preflight callStatic (total=${total})…`);
-        if (tokenIsNative()) {
-          await splitter.callStatic.splitNative(recAddrs, bps, { value: amountBN });
-        } else {
-          await splitter.callStatic.splitToken(token.address, amountBN, recAddrs, bps);
-        }
-        log(`Preflight OK ✅ (total=${total})`);
-        return { bps, total };
-      } catch (e) {
-        const m = prettyRpcError(e);
-        log(`Preflight failed (total=${total}): ${m}`);
-        // keep trying next candidate
-      }
+    const sendAmt = feeAdjust ? (amt * (1 - PLATFORM_FEE_PCT / 100)) : amt;
+
+    if (tokenIsNative()) {
+      return ethers.utils.parseEther(String(sendAmt));
     }
-    throw new Error("Splitter rejected both percent totals (10000 and 9900). Contract rules differ or recipients/amount invalid.");
+    return ethers.utils.parseUnits(String(sendAmt), tokenMeta.decimals);
   }
 
+  // Execute with retries: totals (10000/9900) x feeAdjust (false/true)
   async function split() {
     clearError();
     try {
@@ -481,47 +473,86 @@
       mustBeOnSelectedChain();
       validateRecipients();
 
-      const amt = toFloatSafe(amountIn.value);
-      if (!(amt > 0)) throw new Error("Enter an amount > 0.");
-
       const splitter = currentSplitter();
       const recAddrs = recipients.map(r => r.addr);
 
-      let amountBN;
-      if (tokenIsNative()) amountBN = ethers.utils.parseEther(String(amt));
-      else {
-        if (!token) throw new Error("Enter a valid token address first.");
-        amountBN = ethers.utils.parseUnits(String(amt), tokenMeta.decimals);
+      if (!tokenIsNative() && !token) throw new Error("Enter a valid token address first.");
+
+      // quick sanity checks (helpful for “call ok but send fails”)
+      if (!tokenIsNative()) {
+        const uiAmt = toFloatSafe(amountIn.value);
+        const amtBN = ethers.utils.parseUnits(String(uiAmt), tokenMeta.decimals);
+        const [bal, alw] = await Promise.all([
+          token.balanceOf(account),
+          token.allowance(account, SPLITTERS[currentNetKey])
+        ]);
+        if (bal.lt(amtBN)) throw new Error("Insufficient token balance for entered amount.");
+        if (alw.lt(amtBN)) log("Warning: allowance may be less than amount (approve again if needed).");
       }
 
-      // Detect which total the deployed contract wants (10000 or 9900)
-      const { bps, total } = await pickWorkingBps(splitter, recAddrs, amountBN);
+      let lastErr = null;
 
-      playCoins(recipients.length);
+      for (const total of TOTAL_CANDIDATES) {
+        const bps = buildBpsForTotal(total);
 
-      if (tokenIsNative()) {
-        const est = await splitter.estimateGas.splitNative(recAddrs, bps, { value: amountBN });
-        const gasLimit = est.mul(130).div(100);
-        log(`Executing native split… total=${total} gasLimit=${gasLimit.toString()}`);
-        const tx = await splitter.splitNative(recAddrs, bps, { value: amountBN, gasLimit });
-        log(`Split tx: ${tx.hash}`);
-        await tx.wait();
-        log(`Split complete ✅`);
-      } else {
-        const est = await splitter.estimateGas.splitToken(token.address, amountBN, recAddrs, bps);
-        const gasLimit = est.mul(130).div(100);
-        log(`Executing token split… total=${total} gasLimit=${gasLimit.toString()}`);
-        const tx = await splitter.splitToken(token.address, amountBN, recAddrs, bps, { gasLimit });
-        log(`Split tx: ${tx.hash}`);
-        await tx.wait();
-        log(`Split complete ✅`);
+        for (const feeAdjust of FEE_ADJUST_CANDIDATES) {
+          try {
+            const amountBN = parseAmountBN(amountIn.value, feeAdjust);
+
+            log(`Preflight callStatic (total=${total}, feeAdjust=${feeAdjust ? "ON" : "OFF"})…`);
+            if (tokenIsNative()) {
+              await splitter.callStatic.splitNative(recAddrs, bps, { value: amountBN });
+            } else {
+              await splitter.callStatic.splitToken(token.address, amountBN, recAddrs, bps);
+            }
+            log(`Preflight OK ✅ (total=${total}, feeAdjust=${feeAdjust ? "ON" : "OFF"})`);
+
+            playCoins(recipients.length);
+
+            // Estimate gas (but don't let estimateGas kill execution)
+            let gasLimit = null;
+            try {
+              if (tokenIsNative()) {
+                const est = await splitter.estimateGas.splitNative(recAddrs, bps, { value: amountBN });
+                gasLimit = est.mul(130).div(100);
+              } else {
+                const est = await splitter.estimateGas.splitToken(token.address, amountBN, recAddrs, bps);
+                gasLimit = est.mul(130).div(100);
+              }
+              log(`Gas estimated: ${gasLimit.toString()}`);
+            } catch (ge) {
+              // Manual fallback gas limits
+              gasLimit = ethers.BigNumber.from(tokenIsNative() ? "500000" : "650000");
+              log(`estimateGas failed, using fallback gasLimit=${gasLimit.toString()} (${prettyRpcError(ge)})`);
+            }
+
+            // Send tx
+            let tx;
+            if (tokenIsNative()) {
+              log(`Executing native split…`);
+              tx = await splitter.splitNative(recAddrs, bps, { value: amountBN, gasLimit });
+            } else {
+              log(`Executing token split…`);
+              tx = await splitter.splitToken(token.address, amountBN, recAddrs, bps, { gasLimit });
+            }
+
+            log(`Split tx: ${tx.hash}`);
+            await tx.wait();
+            log(`Split complete ✅ (total=${total}, feeAdjust=${feeAdjust ? "ON" : "OFF"})`);
+
+            await refreshTokenAndWallet();
+            return; // SUCCESS, stop retrying
+          } catch (e) {
+            lastErr = e;
+            log(`Attempt failed (total=${total}, feeAdjust=${feeAdjust ? "ON" : "OFF"}): ${prettyRpcError(e)}`);
+          }
+        }
       }
 
-      await refreshTokenAndWallet();
+      throw new Error(`Split failed after all retries. Last error: ${prettyRpcError(lastErr)}`);
     } catch (e) {
-      const msg = prettyRpcError(e);
-      showError(`Split failed: ${msg}`);
-      log(`Split failed: ${msg}`);
+      showError(`Split failed: ${prettyRpcError(e)}`);
+      log(`Split failed: ${prettyRpcError(e)}`);
     }
   }
 
@@ -571,5 +602,5 @@
   }
 
   wire();
-  log("ZEPHENHEL CITADEL ready. Auto-detecting splitter total: 10000 or 9900.");
+  log("ZEPHENHEL CITADEL ready. Execute retries: totals(10000/9900) x feeAdjust(OFF/ON).");
 })();
