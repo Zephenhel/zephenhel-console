@@ -10,8 +10,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="./styles.css" />
-  <script defer src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  <script defer src="./app.js"></script>
 </head>
 
 <body>
@@ -22,20 +20,24 @@
       <div class="mark">✠</div>
       <div class="brandtext">
         <div class="title">ZEPHENHEL <span class="gold">CITADEL</span></div>
-        <div class="sub">Distribution Command</div>
+        <div class="sub">Mythic Black • Gold • Distribution Command</div>
       </div>
     </div>
 
     <div class="right">
-      <div class="chip" id="netChip">BSC: <b>—</b></div>
-      <div class="chip" id="acctChip">WALLET: <b>DISCONNECTED</b></div>
+      <div class="chip" id="mmChip">MetaMask: <b>—</b></div>
+      <div class="chip" id="netChip">Chain: <b>—</b></div>
+      <div class="chip" id="acctChip">Wallet: <b>DISCONNECTED</b></div>
+
       <button class="btn gold" id="connectBtn">CONNECT</button>
-      <button class="btn" id="switchBtn" title="Switch to BSC">SWITCH</button>
+      <button class="btn" id="switchBtn" title="Switch to BSC">SWITCH TO BSC</button>
     </div>
   </header>
 
-  <main class="wrap">
+  <main class="wrap grid">
     <section class="console">
+      <div class="panelTitle">CONTROL CORE</div>
+
       <div class="row">
         <div class="field">
           <label>SPLITTER (BSC)</label>
@@ -48,6 +50,10 @@
           <label>TOKEN ADDRESS</label>
           <input id="token" placeholder="0x..." spellcheck="false" />
           <div class="micro" id="tokenMeta">Token: — • Decimals: — • Price: —</div>
+          <div class="micro">
+            Balance: <span class="gold" id="bal">—</span>
+            Allowance: <span class="gold" id="alw">—</span>
+          </div>
         </div>
 
         <div class="field">
@@ -86,6 +92,51 @@
         <button class="btn mini" id="copyBtn">COPY RECEIPT</button>
       </div>
     </section>
+
+    <aside class="side">
+      <div class="console sidePanel">
+        <div class="panelTitle">RUNTIME LOG</div>
+        <div class="log" id="log"></div>
+        <button class="btn mini" id="clearLog">CLEAR</button>
+
+        <div class="divider"></div>
+
+        <div class="panelTitle">QUICK CHECKS</div>
+        <div class="micro">
+          • If MetaMask shows “NO”, your extension isn’t injecting on this page.<br/>
+          • If Chain isn’t BSC, hit “SWITCH TO BSC”.<br/>
+          • If Token price is “—”, DexScreener has no price for that token.
+        </div>
+      </div>
+    </aside>
   </main>
+
+  <!-- Ethers (primary + fallback) -->
+  <script>
+    window.__loadEthers = function(src, next){
+      return new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = src; s.defer = true;
+        s.onload = () => resolve(true);
+        s.onerror = () => reject(new Error("Failed: " + src));
+        document.head.appendChild(s);
+      });
+    }
+  </script>
+  <script>
+    (async () => {
+      try {
+        await window.__loadEthers("https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js");
+      } catch(e1) {
+        try {
+          await window.__loadEthers("https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js");
+        } catch(e2) {
+          console.error(e1, e2);
+        }
+      }
+    })();
+  </script>
+
+  <script defer src="./app.js"></script>
 </body>
 </html>
