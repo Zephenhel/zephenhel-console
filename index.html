@@ -1,133 +1,155 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ZEPHENHEL CITADEL — Tri-Chain Splitter</title>
-  <link rel="stylesheet" href="styles.css" />
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+<meta charset="UTF-8" />
+<title>ZEPHENHEL CITADEL</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<style>
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  background: radial-gradient(circle at top, #2a2416, #0c0a05);
+  color: #f5d27a;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 24px;
+  border-bottom: 1px solid #3a2f12;
+}
+
+.brand {
+  font-size: 20px;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+button {
+  background: linear-gradient(145deg, #f5d27a, #c8a44b);
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.container {
+  max-width: 900px;
+  margin: 40px auto;
+  padding: 24px;
+  border-radius: 14px;
+  background: rgba(20,16,8,0.85);
+  border: 1px solid #3a2f12;
+}
+
+.section-title {
+  margin-bottom: 12px;
+  font-size: 16px;
+  opacity: 0.9;
+}
+
+.box {
+  background: #120f07;
+  border: 1px solid #3a2f12;
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+
+input {
+  width: 100%;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #3a2f12;
+  background: #0d0b05;
+  color: #f5d27a;
+}
+
+.footer {
+  text-align: center;
+  opacity: 0.6;
+  font-size: 12px;
+  margin-top: 20px;
+}
+
+.status {
+  margin-left: 12px;
+  opacity: 0.8;
+}
+</style>
 </head>
 
 <body>
-  <div class="bg"></div>
 
-  <header class="topbar">
-    <div class="brand">
-      <div class="sigil">Z</div>
-      <div class="brandText">
-        <div class="title">ZEPHENHEL CITADEL</div>
-        <div class="sub">Mythic tri-chain splitter • BSC • Ethereum • Polygon</div>
-      </div>
-    </div>
+<header>
+  <div class="brand">ZEPHENHEL CITADEL</div>
+  <div>
+    <span id="walletStatus" class="status">Wallet disconnected</span>
+    <button id="connectBtn">Connect</button>
+  </div>
+</header>
 
-    <div class="hud">
-      <div class="pill" id="netPill">Network: —</div>
-      <div class="pill" id="acctPill">Wallet: Disconnected</div>
-      <button class="btn gold" id="btnConnect">Connect</button>
-      <button class="btn" id="btnSwitch">Switch Network</button>
-    </div>
-  </header>
+<div class="container">
 
-  <main class="grid">
-    <!-- LEFT: Control -->
-    <section class="card">
-      <div class="cardHead">
-        <div>
-          <div class="cardTitle">Splitter Command</div>
-          <div class="cardHint">Uses your deployed splitter for the active chain. Percent split must total 100.</div>
-        </div>
-        <div class="badge">Fee: <span class="tiny">1% (platform)</span></div>
-      </div>
+  <div class="section-title">Network</div>
+  <div class="box" id="networkBox">Not connected</div>
 
-      <div class="row2">
-        <div class="field">
-          <label>Mode</label>
-          <select id="mode">
-            <option value="split">Split (ERC20 / BEP20)</option>
-          </select>
-        </div>
+  <div class="section-title">Wallet Balance</div>
+  <div class="box" id="balanceBox">—</div>
 
-        <div class="field">
-          <label>Active Splitter Contract</label>
-          <input id="splitterAddr" type="text" readonly />
-          <div class="mini" id="splitterNote"></div>
-        </div>
-      </div>
+  <div class="section-title">Token Amount</div>
+  <div class="box">
+    <input id="amountInput" type="number" placeholder="0.0" />
+    <small>Platform fee: <b>1%</b></small>
+  </div>
 
-      <div class="field">
-        <label>Token Contract Address</label>
-        <input id="tokenAddr" placeholder="0x… (ERC20/BEP20)" />
-        <div class="mini">
-          Tip: paste token contract for the same network you’re connected to.
-        </div>
-      </div>
+</div>
 
-      <div class="row2">
-        <div class="field">
-          <label>Amount (token units)</label>
-          <div class="withBtn">
-            <input id="amount" placeholder="0.0" />
-            <button class="btn miniBtn" id="btnMax">MAX</button>
-          </div>
-          <div class="mini" id="amountHint">Gas is paid in the native coin (BNB/ETH/MATIC) separately.</div>
-        </div>
+<div class="footer">
+  Mythic tri-chain splitter • BSC • Ethereum • Polygon
+</div>
 
-        <div class="panel">
-          <div class="panelHead">
-            <div class="panelTitle">Token & Value</div>
-            <div class="chip" id="liveChip">LIVE</div>
-          </div>
-          <div class="kv">
-            <div class="k">Symbol</div><div class="v" id="tokSymbol">—</div>
-            <div class="k">Decimals</div><div class="v" id="tokDecimals">—</div>
-            <div class="k">Your token bal</div><div class="v" id="tokBal">—</div>
-            <div class="k">USD est</div><div class="v" id="usdEst">—</div>
-            <div class="k">Native bal</div><div class="v" id="nativeBal">—</div>
-          </div>
-        </div>
-      </div>
+<script>
+let provider, signer;
 
-      <div class="divider"></div>
+async function connectWallet() {
+  if (!window.ethereum) {
+    alert("MetaMask not detected");
+    return;
+  }
 
-      <div class="recipientsHead">
-        <div>
-          <div class="cardTitle">Recipients</div>
-          <div class="cardHint">Add/remove rows. Percent must total exactly 100.</div>
-        </div>
-        <div class="right">
-          <div class="pill" id="totalPill">Total: 0%</div>
-          <button class="btn" id="btnAdd">+ Add Recipient</button>
-        </div>
-      </div>
+  provider = new ethers.providers.Web3Provider(window.ethereum);
+  await provider.send("eth_requestAccounts", []);
+  signer = provider.getSigner();
 
-      <div id="recipients"></div>
+  const address = await signer.getAddress();
+  const network = await provider.getNetwork();
+  const balance = await provider.getBalance(address);
 
-      <div class="actions">
-        <button class="btn" id="btnApprove">Approve</button>
-        <button class="btn gold" id="btnSplit">Execute Split</button>
-      </div>
+  document.getElementById("walletStatus").innerText =
+    address.slice(0,6) + "..." + address.slice(-4);
 
-      <div class="status" id="statusBar">Ready.</div>
-    </section>
+  document.getElementById("networkBox").innerText =
+    network.name + " (chainId " + network.chainId + ")";
 
-    <!-- RIGHT: Log + Safety -->
-    <section class="card">
-      <div class="cardHead">
-        <div>
-          <div class="cardTitle">Event / Status Log</div>
-          <div class="cardHint">If something fails, this is what we read first.</div>
-        </div>
-        <button class="btn" id="btnClear">Clear</button>
-      </div>
+  document.getElementById("balanceBox").innerText =
+    ethers.utils.formatEther(balance) + " native";
 
-      <pre class="log" id="log"></pre>
+  console.log("Connected:", address);
+}
 
-      <div class="footnote">
-        Experimental frontend. Always test tiny amounts first.
-      </div>
-    </section>
-  </main>
+document.getElementById("connectBtn").onclick = connectWallet;
+</script>
 
-  <script src="app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
+
 </body>
 </html>
