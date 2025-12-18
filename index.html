@@ -3,186 +3,233 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ZEPHENHEL CITADEL</title>
+  <title>ZEPHENHEL CITADEL • CYBER WARFARE CONSOLE</title>
   <link rel="stylesheet" href="./styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 </head>
 
 <body>
+  <!-- Animated background layers -->
+  <div class="bg-grid"></div>
+  <div class="bg-scanlines"></div>
+  <div class="bg-vignette"></div>
 
-  <!-- Top Bar -->
-  <div class="topbar">
-    <div class="topbar-inner">
-      <div class="brand">
-        <div class="brand-badge">Z</div>
-        <div style="min-width:0">
-          <h1>ZEPHENHEL CITADEL</h1>
-          <p>Mythic tri-chain splitter • BSC • Ethereum • Polygon</p>
-        </div>
-      </div>
-
-      <div class="pills">
-        <div class="pill net" id="netPill">Network: —</div>
-        <div class="pill wallet" id="walletPill">Wallet: Disconnected</div>
-
-        <!-- Connect button changes to green “Connected” in JS -->
-        <button class="btn gold" id="connectBtn">Connect</button>
-        <button class="btn ghost" id="switchBtn" title="Switch to the selected network">Switch Network</button>
+  <!-- HUD Top Bar -->
+  <header class="hud-top">
+    <div class="hud-left">
+      <div class="sigil">Z</div>
+      <div class="hud-title">
+        <div class="title">ZEPHENHEL CITADEL</div>
+        <div class="subtitle">CYBER WARFARE CONSOLE • TRI-CHAIN SPLITTER + VAULT</div>
       </div>
     </div>
-  </div>
 
-  <!-- Main -->
-  <div class="container">
+    <div class="hud-right">
+      <div class="hud-pill" id="netPill">NETWORK: —</div>
+      <div class="hud-pill" id="walletPill">WALLET: DISCONNECTED</div>
 
-    <div class="grid">
+      <button class="hud-btn gold" id="connectBtn">
+        <span class="dot" id="connDot"></span>
+        <span id="connectText">CONNECT</span>
+      </button>
 
-      <!-- LEFT: Split Command -->
-      <div class="card">
-        <div class="card-title">
-          <h2>Distribution Command</h2>
-          <div class="small" id="feeText">Platform fee: 1%</div>
-        </div>
-
-        <div class="label">Mode</div>
-        <select id="modeSelect">
-          <option value="split">Token Split (ERC20 / BEP20)</option>
-          <!-- keep vault option if your JS supports it later -->
-          <!-- <option value="vault">Inheritance Vault</option> -->
-        </select>
-
-        <div class="hr"></div>
-
-        <div class="label">Network</div>
-        <select id="networkSelect">
-          <option value="bsc">BSC Mainnet</option>
-          <option value="eth">Ethereum Mainnet</option>
-          <option value="poly">Polygon Mainnet</option>
-        </select>
-
-        <div class="hr"></div>
-
-        <div class="label">Token address (ERC20 / BEP20)</div>
-        <input id="tokenAddress" placeholder="0x..." autocomplete="off" />
-
-        <div class="hr"></div>
-
-        <div class="label">Amount</div>
-        <div class="row" style="grid-template-columns: 1fr 120px; align-items: end;">
-          <div>
-            <input id="amountInput" type="number" step="any" placeholder="0.0" />
-            <div class="small" id="maxHint">MAX is for native only (BNB/ETH/MATIC). For tokens, enter a token amount.</div>
-          </div>
-          <button class="btn ghost" id="maxBtn">MAX</button>
-        </div>
-
-        <div class="hr"></div>
-
-        <div class="card" style="padding:12px; background: rgba(7,8,12,.45); border:1px solid rgba(255,255,255,.06);">
-          <div class="card-title" style="margin-bottom:6px">
-            <h2 style="font-size:12px">USD Estimate</h2>
-            <div class="small" id="usdSource">via Dexscreener</div>
-          </div>
-
-          <div class="row" style="grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:0;">
-            <div>
-              <div class="small">USD estimate</div>
-              <div style="font-size:22px; font-weight:900;" id="usdEstimate">$—</div>
-            </div>
-            <div>
-              <div class="small">Post-fee amount</div>
-              <div style="font-size:22px; font-weight:900;" id="postFeeAmount">—</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="hr"></div>
-
-        <div class="card-title">
-          <h2>Recipients</h2>
-          <div style="display:flex; gap:8px; align-items:center;">
-            <div class="pill" id="totalPill">Total: 0.00%</div>
-            <button class="btn ghost" id="addRecipientBtn">+ Add</button>
-          </div>
-        </div>
-
-        <!-- Recipients container populated by JS -->
-        <div id="recipientsContainer"></div>
-
-        <div class="hr"></div>
-
-        <div style="display:flex; gap:10px; flex-wrap:wrap;">
-          <button class="btn ghost" id="approveBtn">Approve</button>
-          <button class="btn gold" id="executeBtn">Execute Split</button>
-        </div>
-
-        <div class="notice" style="margin-top:10px" id="tipBox">
-          Tip: If your splitter takes the 1% fee, Citadel can auto-adjust shares so the contract receives the correct totals.
-        </div>
-
-        <div id="errorBox" class="error" style="margin-top:10px; display:none;">
-          Error: <span id="errorText">—</span>
-        </div>
-
-        <div class="footer-note">Always test small amounts first.</div>
-      </div>
-
-      <!-- RIGHT: Live Data + Log -->
-      <div class="card">
-        <div class="card-title">
-          <h2>Live Data</h2>
-          <div style="display:flex; gap:10px; align-items:center;">
-            <label class="pill" style="display:flex; gap:8px; align-items:center;">
-              <input type="checkbox" id="soundToggle" checked />
-              <span>Sound FX</span>
-            </label>
-            <button class="btn ghost" id="clearLogBtn">Clear</button>
-          </div>
-        </div>
-
-        <div class="row" style="grid-template-columns: 1fr 1fr; gap:12px;">
-          <div class="card" style="padding:12px; background: rgba(7,8,12,.45); border:1px solid rgba(255,255,255,.06);">
-            <div class="small">Native balance</div>
-            <div style="font-size:20px; font-weight:900;" id="nativeBal">—</div>
-            <div class="small" id="nativeSymbol">—</div>
-          </div>
-
-          <div class="card" style="padding:12px; background: rgba(7,8,12,.45); border:1px solid rgba(255,255,255,.06);">
-            <div class="small">Token balance</div>
-            <div style="font-size:20px; font-weight:900;" id="tokenBal">—</div>
-            <div class="small" id="tokenSymbol">—</div>
-          </div>
-        </div>
-
-        <div class="row" style="grid-template-columns: 1fr 1fr; gap:12px;">
-          <div class="card" style="padding:12px; background: rgba(7,8,12,.45); border:1px solid rgba(255,255,255,.06);">
-            <div class="small">Decimals</div>
-            <div style="font-size:20px; font-weight:900;" id="tokenDecimals">—</div>
-          </div>
-
-          <div class="card" style="padding:12px; background: rgba(7,8,12,.45); border:1px solid rgba(255,255,255,.06);">
-            <div class="small">Allowance → splitter</div>
-            <div style="font-size:20px; font-weight:900;" id="allowanceVal">—</div>
-          </div>
-        </div>
-
-        <div class="hr"></div>
-
-        <div class="label">Active splitter contract</div>
-        <input id="activeSplitter" readonly />
-
-        <div class="hr"></div>
-
-        <div class="card-title">
-          <h2>Runtime Log</h2>
-          <div class="small" id="statusText">Ready. Connect wallet to begin.</div>
-        </div>
-        <div class="log" id="logBox"></div>
-      </div>
-
+      <button class="hud-btn ghost" id="switchBtn">SWITCH</button>
     </div>
-  </div>
+  </header>
 
-  <!-- Your app logic -->
+  <!-- Mode Tabs -->
+  <nav class="tabs">
+    <button class="tab active" id="tabSplit">SPLITTER</button>
+    <button class="tab" id="tabVault">VAULT</button>
+    <div class="tabs-right">
+      <label class="toggle">
+        <input id="soundToggle" type="checkbox" checked />
+        <span class="toggle-ui"></span>
+        <span class="toggle-text">SFX</span>
+      </label>
+      <button class="hud-btn ghost" id="clearLogBtn">CLEAR LOG</button>
+    </div>
+  </nav>
+
+  <main class="wrap">
+    <section class="grid">
+      <!-- LEFT PANEL -->
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="tag">OPERATOR</span>
+            <span class="name" id="panelTitle">DISTRIBUTION COMMAND</span>
+          </div>
+          <div class="panel-meta">
+            <div class="tiny">fee</div>
+            <div class="tiny glow">1% (platform)</div>
+          </div>
+        </div>
+
+        <!-- SPLITTER VIEW -->
+        <div id="viewSplit">
+          <div class="field">
+            <div class="label">CHAIN</div>
+            <select id="networkSel" class="input">
+              <option value="bsc">BSC MAINNET</option>
+              <option value="eth">ETHEREUM MAINNET</option>
+              <option value="polygon">POLYGON MAINNET</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <div class="label">TOKEN ADDRESS (ERC20/BEP20)</div>
+            <input id="tokenAddr" class="input" placeholder="0x..." autocomplete="off" />
+            <div class="hint">Token-only splitter: enter token address (native coin not supported by this splitter).</div>
+          </div>
+
+          <div class="field two">
+            <div>
+              <div class="label">AMOUNT</div>
+              <input id="amount" class="input" placeholder="0.0" inputmode="decimal" />
+              <div class="hint" id="gasHint">—</div>
+            </div>
+            <div class="hud-box">
+              <div class="box-label">USD ESTIMATE</div>
+              <div class="box-value" id="usdEst">—</div>
+              <div class="box-label">POST-FEE EST</div>
+              <div class="box-value smallv" id="postFeeAmt">—</div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="row-head">
+            <div>
+              <div class="label">RECIPIENT MATRIX</div>
+              <div class="hint">Percent must total 100%. Add/remove recipients.</div>
+            </div>
+            <div class="row-actions">
+              <div class="hud-pill small" id="totalPill">TOTAL: 0.00%</div>
+              <button class="hud-btn ghost" id="addRecBtn">+ ADD</button>
+            </div>
+          </div>
+
+          <div id="recList" class="recList"></div>
+
+          <div class="divider"></div>
+
+          <div class="actions">
+            <button class="hud-btn ghost" id="approveBtn">APPROVE</button>
+            <button class="hud-btn gold" id="splitBtn">EXECUTE SPLIT</button>
+          </div>
+
+          <div class="alert error" id="errBox" style="display:none;">
+            <span class="badge">ERROR</span>
+            <span id="errText">—</span>
+          </div>
+        </div>
+
+        <!-- VAULT VIEW (UI only — wired in app.js next) -->
+        <div id="viewVault" style="display:none;">
+          <div class="field">
+            <div class="label">VAULT TOKEN ADDRESS</div>
+            <input id="vTokenAddr" class="input" placeholder="0x..." autocomplete="off" />
+          </div>
+
+          <div class="field two">
+            <div>
+              <div class="label">DEPOSIT AMOUNT</div>
+              <input id="vAmount" class="input" placeholder="0.0" inputmode="decimal" />
+            </div>
+            <div>
+              <div class="label">INACTIVITY (DAYS)</div>
+              <input id="vDays" class="input" placeholder="30" inputmode="numeric" />
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="label">SAFE WALLET (EMERGENCY)</div>
+            <input id="vSafe" class="input" placeholder="0x..." autocomplete="off" />
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="row-head">
+            <div>
+              <div class="label">INHERITANCE RECIPIENTS</div>
+              <div class="hint">Shares act like weights (ratios). Must be >0.</div>
+            </div>
+            <div class="row-actions">
+              <button class="hud-btn ghost" id="vAddRecBtn">+ ADD</button>
+            </div>
+          </div>
+
+          <div id="vRecList" class="recList"></div>
+
+          <div class="divider"></div>
+
+          <div class="actions">
+            <button class="hud-btn ghost" id="vApproveBtn">APPROVE</button>
+            <button class="hud-btn gold" id="vCreateBtn">CREATE VAULT</button>
+          </div>
+
+          <div class="actions">
+            <button class="hud-btn ghost" id="vPingBtn">I'M ALIVE (PING)</button>
+            <button class="hud-btn ghost" id="vEmergencyBtn">EMERGENCY → SAFE</button>
+            <button class="hud-btn gold" id="vExecuteBtn">EXECUTE INHERITANCE</button>
+          </div>
+
+          <div class="hint">Vault automation requires Chainlink Automation on the deployed Vault v2.</div>
+        </div>
+      </div>
+
+      <!-- RIGHT PANEL -->
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="tag">SYSTEM</span>
+            <span class="name">LIVE TELEMETRY</span>
+          </div>
+          <div class="panel-meta">
+            <button class="hud-btn ghost" id="liveBtn">REFRESH</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="label">ACTIVE SPLITTER</div>
+          <input id="splitterAddr" class="input" readonly />
+        </div>
+
+        <div class="telemetry">
+          <div class="tile">
+            <div class="t-label">WALLET BALANCE</div>
+            <div class="t-value" id="walletBal">—</div>
+            <div class="t-sub" id="nativeTag">—</div>
+          </div>
+          <div class="tile">
+            <div class="t-label">TOKEN BALANCE</div>
+            <div class="t-value" id="tokBal">—</div>
+            <div class="t-sub" id="tokSym">—</div>
+          </div>
+          <div class="tile">
+            <div class="t-label">DECIMALS</div>
+            <div class="t-value" id="tokDec">—</div>
+            <div class="t-sub">ERC20</div>
+          </div>
+          <div class="tile">
+            <div class="t-label">ALLOWANCE → SPLITTER</div>
+            <div class="t-value" id="allow">—</div>
+            <div class="t-sub">APPROVE REQUIRED</div>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="loghead">
+          <div class="label">RUNTIME LOG</div>
+          <div class="hint">Every action prints exact params + tx hash.</div>
+        </div>
+        <pre class="log" id="log"></pre>
+      </div>
+    </section>
+  </main>
+
   <script src="./app.js"></script>
 </body>
 </html>
