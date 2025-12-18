@@ -9,145 +9,149 @@
 <body>
   <header class="topbar">
     <div class="brand">
-      <div class="sigil">Z</div>
-      <div>
+      <div class="mark">Z</div>
+      <div class="brandtext">
         <div class="title">ZEPHENHEL CITADEL</div>
         <div class="subtitle">Mythic tri-chain splitter • BSC • Ethereum • Polygon</div>
       </div>
     </div>
 
     <div class="top-actions">
-      <div class="pill">
-        <span id="dot" class="dot"></span>
-        <span id="netLabel">Not connected</span>
-      </div>
-
-      <select id="chainMode" class="select">
-        <option value="bsc">BSC</option>
-        <option value="eth">Ethereum</option>
-        <option value="polygon">Polygon</option>
-      </select>
-
-      <button id="switchBtn" class="btn btn-ghost" style="display:none;">Switch Network</button>
-      <button id="connectBtn" class="btn btn-gold">Connect Wallet</button>
+      <div class="pill" id="netPill">Network: —</div>
+      <div class="pill" id="acctPill">Wallet: Disconnected</div>
+      <button class="btn gold" id="connectBtn">Connect</button>
+      <button class="btn ghost" id="switchBtn" title="Switch to the selected network">Switch Network</button>
     </div>
   </header>
 
   <main class="wrap">
     <section class="grid">
+      <!-- LEFT: Split panel -->
       <div class="card">
         <div class="card-h">
-          <div class="card-t">Active Splitter</div>
-          <div class="tiny muted">Fee: <span class="tiny">1% platform</span></div>
-        </div>
-
-        <label class="lbl">Splitter contract</label>
-        <input id="splitterAddr" class="input mono" readonly />
-
-        <div class="row3">
-          <div class="mini">
-            <div class="mini-t">Wallet</div>
-            <div id="acctLabel" class="mono">—</div>
-          </div>
-          <div class="mini">
-            <div class="mini-t">Native balance</div>
-            <div id="nativeBal" class="mono">—</div>
-          </div>
-          <div class="mini">
-            <div class="mini-t">Status</div>
-            <div id="statusText">Ready.</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-h">
-          <div class="card-t">Token</div>
-          <div class="tiny muted">ERC-20 only</div>
-        </div>
-
-        <label class="lbl">Token contract</label>
-        <input id="tokenAddr" class="input mono" placeholder="0x…" />
-
-        <div class="row2">
-          <div class="mini">
-            <div class="mini-t">Symbol / Decimals</div>
-            <div class="mono"><span id="tokSym">—</span> • <span id="tokDec">—</span></div>
-          </div>
-          <div class="mini">
-            <div class="mini-t">Token balance</div>
-            <div id="tokenBal" class="mono">—</div>
-          </div>
-        </div>
-
-        <div class="row2">
-          <div class="mini">
-            <div class="mini-t">Dexscreener price</div>
-            <div id="priceUsd" class="mono">—</div>
-          </div>
-          <div class="mini">
-            <div class="mini-t">USD estimate</div>
-            <div id="valueUsd" class="mono">—</div>
-          </div>
-        </div>
-
-        <div class="row2">
           <div>
-            <label class="lbl">Amount</label>
-            <div class="amtline">
-              <input id="amount" class="input mono" placeholder="0.0" />
-              <button id="maxBtn" class="btn btn-ghost">MAX</button>
-            </div>
-            <div class="tiny muted">MAX uses token balance. (Gas reserve matters only for native coin, not ERC-20 transfers.)</div>
+            <div class="card-title">Distribution Command</div>
+            <div class="card-sub">Enter <b>simple percentages</b> (must total 100). Citadel auto-adjusts for the fee.</div>
           </div>
-          <div class="mini">
-            <div class="mini-t">Allowance → splitter</div>
-            <div id="allowance" class="mono">—</div>
+          <div class="fee-chip">platform fee <span class="tiny">1%</span></div>
+        </div>
+
+        <div class="row">
+          <label class="lab">Network</label>
+          <select id="networkSel" class="in">
+            <option value="bsc">BSC Mainnet</option>
+            <option value="eth">Ethereum Mainnet</option>
+            <option value="polygon">Polygon Mainnet</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <label class="lab">Token address (ERC20 / BEP20)</label>
+          <input id="tokenAddr" class="in" placeholder="0x... (leave blank to split native coin)" />
+        </div>
+
+        <div class="row two">
+          <div>
+            <label class="lab">Amount</label>
+            <div class="inwrap">
+              <input id="amount" class="in" placeholder="0.0" inputmode="decimal" />
+              <button class="btn mini" id="maxBtn" type="button">MAX</button>
+            </div>
+            <div class="hint" id="gasHint">MAX reserves gas automatically.</div>
+          </div>
+          <div class="statbox">
+            <div class="stat">
+              <div class="k">USD estimate</div>
+              <div class="v" id="usdEst">—</div>
+            </div>
+            <div class="stat">
+              <div class="k">You receive (post-fee)</div>
+              <div class="v" id="postFeeAmt">—</div>
+            </div>
           </div>
         </div>
+
+        <div class="divider"></div>
+
+        <div class="rec-h">
+          <div class="card-title">Recipients</div>
+          <div class="rec-tools">
+            <div class="pill" id="totalPill">Total: 0%</div>
+            <button class="btn mini ghost" id="addRecBtn" type="button">+ Add</button>
+          </div>
+        </div>
+
+        <div id="recList" class="recList"></div>
 
         <div class="actions">
-          <button id="approveBtn" class="btn btn-ghost" disabled>Approve</button>
-          <button id="splitBtn" class="btn btn-gold" disabled>Execute Split</button>
+          <button class="btn ghost" id="approveBtn">Approve</button>
+          <button class="btn gold" id="splitBtn">Execute Split</button>
         </div>
 
-        <div id="errBox" class="alert" style="display:none;"></div>
+        <div class="note" id="adjustNote">
+          Tip: If your splitter expects 99% totals due to the 1% fee, Citadel will automatically send the correct shares.
+        </div>
+
+        <div class="err" id="errBox" hidden></div>
       </div>
 
+      <!-- RIGHT: Info + Log -->
       <div class="card">
         <div class="card-h">
-          <div class="card-t">Recipients</div>
-          <div class="tiny muted">Percent total must equal 100</div>
+          <div>
+            <div class="card-title">Token & Wallet Intel</div>
+            <div class="card-sub">Live balance, token metadata, allowance, and the active splitter contract.</div>
+          </div>
+          <button class="btn mini ghost" id="liveBtn" type="button">Refresh</button>
         </div>
 
-        <div class="recipient-head">
-          <div class="tiny muted">Total: <b id="pctTotal">0</b>%</div>
-          <button id="addRecipient" class="btn btn-ghost">+ Add</button>
+        <div class="intel">
+          <div class="intelItem">
+            <div class="k">Wallet balance</div>
+            <div class="v" id="walletBal">—</div>
+          </div>
+          <div class="intelItem">
+            <div class="k">Token symbol</div>
+            <div class="v" id="tokSym">—</div>
+          </div>
+          <div class="intelItem">
+            <div class="k">Decimals</div>
+            <div class="v" id="tokDec">—</div>
+          </div>
+          <div class="intelItem">
+            <div class="k">Token balance</div>
+            <div class="v" id="tokBal">—</div>
+          </div>
+          <div class="intelItem">
+            <div class="k">Allowance → splitter</div>
+            <div class="v" id="allow">—</div>
+          </div>
+          <div class="intelItem wide">
+            <div class="k">Active splitter contract</div>
+            <div class="v mono" id="splitterAddr">—</div>
+          </div>
         </div>
 
-        <div id="pctWarn" class="warn" style="display:none;">Percents must total exactly 100.</div>
+        <div class="divider"></div>
 
-        <div id="recipientsWrap" class="recipients"></div>
-
-        <div class="tiny muted">
-          Tip: if your contract expects basis points (10000), the app auto-detects it and sends x100.
+        <div class="log-h">
+          <div class="card-title">Runtime Log</div>
+          <div class="log-tools">
+            <label class="chk">
+              <input type="checkbox" id="soundToggle" checked />
+              <span>Sound FX</span>
+            </label>
+            <button class="btn mini ghost" id="clearLogBtn" type="button">Clear</button>
+          </div>
         </div>
-      </div>
+        <pre class="log" id="log"></pre>
 
-      <div class="card">
-        <div class="card-h">
-          <div class="card-t">Runtime Log</div>
-          <button id="clearLog" class="btn btn-ghost">Clear</button>
-        </div>
-        <pre id="log" class="log"></pre>
+        <div class="footnote">Always test small amounts first.</div>
       </div>
     </section>
-
-    <footer class="foot">
-      Experimental frontend. Always test small amounts first.
-    </footer>
   </main>
 
+  <!-- ethers v5 -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   <script src="./app.js"></script>
 </body>
