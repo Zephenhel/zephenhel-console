@@ -1,155 +1,1087 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>ZEPHENHEL CITADEL</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ZEPHENHEL CITADEL • Tri-Chain Splitter</title>
 
-<style>
-body {
-  margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
-  background: radial-gradient(circle at top, #2a2416, #0c0a05);
-  color: #f5d27a;
-}
+  <style>
+    :root{
+      --bg0:#050402;
+      --bg1:#0b0904;
+      --panel:rgba(18,14,7,.82);
+      --panel2:rgba(10,8,4,.70);
+      --line:rgba(255,210,110,.18);
+      --line2:rgba(255,210,110,.10);
+      --gold:#ffd27a;
+      --gold2:#caa14e;
+      --gold3:#ffedb3;
+      --text:#f3dba0;
+      --muted:rgba(243,219,160,.70);
+      --good:#74ffb4;
+      --warn:#ffcc66;
+      --bad:#ff6b6b;
+      --shadow: 0 18px 55px rgba(0,0,0,.55);
+      --radius:18px;
+    }
 
-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 14px 24px;
-  border-bottom: 1px solid #3a2f12;
-}
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      color:var(--text);
+      background:
+        radial-gradient(1100px 520px at 20% -10%, rgba(255,210,110,.20), transparent 55%),
+        radial-gradient(900px 520px at 85% 0%, rgba(255,210,110,.12), transparent 55%),
+        radial-gradient(900px 520px at 55% 110%, rgba(255,210,110,.10), transparent 60%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+      min-height:100vh;
+    }
 
-.brand {
-  font-size: 20px;
-  font-weight: bold;
-  letter-spacing: 1px;
-}
+    header{
+      position:sticky; top:0; z-index:50;
+      backdrop-filter: blur(10px);
+      background: linear-gradient(180deg, rgba(10,8,4,.92), rgba(10,8,4,.55));
+      border-bottom:1px solid var(--line);
+    }
 
-button {
-  background: linear-gradient(145deg, #f5d27a, #c8a44b);
-  border: none;
-  border-radius: 8px;
-  padding: 10px 18px;
-  font-weight: bold;
-  cursor: pointer;
-}
+    .top{
+      max-width:1100px;
+      margin:0 auto;
+      padding:14px 16px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
 
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+    .brand{
+      display:flex; align-items:center; gap:12px;
+      min-width:220px;
+    }
 
-.container {
-  max-width: 900px;
-  margin: 40px auto;
-  padding: 24px;
-  border-radius: 14px;
-  background: rgba(20,16,8,0.85);
-  border: 1px solid #3a2f12;
-}
+    .sigil{
+      width:38px; height:38px;
+      border-radius:14px;
+      background:
+        radial-gradient(circle at 35% 35%, rgba(255,235,179,.90), rgba(255,210,110,.10) 58%, rgba(0,0,0,.35) 100%),
+        linear-gradient(145deg, rgba(255,210,110,.25), rgba(0,0,0,.2));
+      border:1px solid var(--line);
+      box-shadow: 0 10px 22px rgba(0,0,0,.35);
+      position:relative;
+      overflow:hidden;
+    }
+    .sigil:after{
+      content:"";
+      position:absolute; inset:-40%;
+      background: conic-gradient(from 90deg, transparent, rgba(255,210,110,.25), transparent);
+      animation: spin 3.5s linear infinite;
+      opacity:.75;
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
 
-.section-title {
-  margin-bottom: 12px;
-  font-size: 16px;
-  opacity: 0.9;
-}
+    .brand h1{
+      margin:0;
+      font-size:16px;
+      letter-spacing:1.5px;
+      color:var(--gold3);
+    }
+    .brand .sub{
+      margin-top:2px;
+      font-size:12px;
+      color:var(--muted);
+    }
 
-.box {
-  background: #120f07;
-  border: 1px solid #3a2f12;
-  border-radius: 10px;
-  padding: 14px;
-  margin-bottom: 16px;
-}
+    .pillrow{
+      display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+      justify-content:flex-end;
+    }
 
-input {
-  width: 100%;
-  padding: 10px;
-  border-radius: 6px;
-  border: 1px solid #3a2f12;
-  background: #0d0b05;
-  color: #f5d27a;
-}
+    .pill{
+      padding:8px 10px;
+      border-radius:999px;
+      background: rgba(0,0,0,.25);
+      border:1px solid var(--line2);
+      color:var(--muted);
+      font-size:12px;
+      display:flex; gap:8px; align-items:center;
+      white-space:nowrap;
+    }
+    .dot{width:8px;height:8px;border-radius:999px;background:var(--bad);box-shadow:0 0 12px rgba(255,107,107,.35)}
+    .dot.good{background:var(--good);box-shadow:0 0 12px rgba(116,255,180,.35)}
+    .dot.warn{background:var(--warn);box-shadow:0 0 12px rgba(255,204,102,.35)}
 
-.footer {
-  text-align: center;
-  opacity: 0.6;
-  font-size: 12px;
-  margin-top: 20px;
-}
+    .btn{
+      cursor:pointer;
+      border:none;
+      border-radius:12px;
+      padding:10px 14px;
+      font-weight:800;
+      letter-spacing:.4px;
+      color:#1a1206;
+      background: linear-gradient(145deg, var(--gold3), var(--gold2));
+      box-shadow: 0 10px 26px rgba(255,210,110,.10), inset 0 1px 0 rgba(255,255,255,.35);
+      transition: transform .08s ease, filter .15s ease, opacity .15s ease;
+      user-select:none;
+    }
+    .btn:active{transform:translateY(1px)}
+    .btn.secondary{
+      background: rgba(0,0,0,.20);
+      color:var(--gold3);
+      border:1px solid var(--line);
+      box-shadow:none;
+    }
+    .btn:disabled{opacity:.55; cursor:not-allowed}
 
-.status {
-  margin-left: 12px;
-  opacity: 0.8;
-}
-</style>
+    main{
+      max-width:1100px;
+      margin:18px auto 60px;
+      padding:0 16px;
+      display:grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap:14px;
+    }
+    @media (max-width: 980px){
+      main{grid-template-columns:1fr}
+    }
+
+    .card{
+      background: linear-gradient(180deg, rgba(22,16,8,.88), rgba(12,9,4,.76));
+      border:1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .card .head{
+      padding:14px 14px 12px;
+      border-bottom:1px solid var(--line2);
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .card .head h2{
+      margin:0;
+      font-size:14px;
+      letter-spacing:.8px;
+      color:var(--gold3);
+    }
+    .card .head p{
+      margin:4px 0 0;
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.25rem;
+    }
+
+    .card .body{padding:14px}
+
+    .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+    @media (max-width: 640px){ .grid2{grid-template-columns:1fr} }
+
+    label{
+      display:block;
+      font-size:12px;
+      color:var(--muted);
+      margin:0 0 6px;
+    }
+    input, select, textarea{
+      width:100%;
+      padding:10px 11px;
+      border-radius:12px;
+      border:1px solid var(--line2);
+      background: rgba(0,0,0,.28);
+      color:var(--gold3);
+      outline:none;
+    }
+    input::placeholder{color:rgba(255,235,179,.40)}
+    textarea{min-height:118px; resize:vertical}
+
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .row.right{justify-content:flex-end}
+    .tiny{
+      font-size:11px;
+      color:rgba(243,219,160,.62);
+    }
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace}
+
+    .hr{
+      height:1px;
+      background: linear-gradient(90deg, transparent, rgba(255,210,110,.20), transparent);
+      margin:12px 0;
+    }
+
+    .recipient{
+      border:1px solid var(--line2);
+      background: rgba(0,0,0,.20);
+      border-radius:14px;
+      padding:10px;
+      display:grid;
+      grid-template-columns: 1fr 120px 46px;
+      gap:10px;
+      align-items:center;
+      margin-bottom:10px;
+    }
+    @media (max-width: 640px){
+      .recipient{grid-template-columns:1fr; }
+    }
+    .xbtn{
+      width:46px; height:42px;
+      border-radius:12px;
+      border:1px solid rgba(255,107,107,.25);
+      background: rgba(255,107,107,.10);
+      color:var(--bad);
+      font-weight:900;
+      cursor:pointer;
+    }
+
+    .statusbar{
+      padding:10px 14px;
+      border-top:1px solid var(--line2);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      background: rgba(0,0,0,.18);
+    }
+
+    .banner{
+      border:1px dashed rgba(255,210,110,.25);
+      background: rgba(0,0,0,.18);
+      border-radius:14px;
+      padding:10px 12px;
+      color:rgba(255,235,179,.70);
+      font-size:12px;
+      line-height:1.2rem;
+    }
+
+    .alert{
+      border-radius:14px;
+      padding:10px 12px;
+      font-size:12px;
+      border:1px solid var(--line2);
+      background: rgba(0,0,0,.22);
+    }
+    .alert.good{border-color:rgba(116,255,180,.25); background: rgba(116,255,180,.07)}
+    .alert.bad{border-color:rgba(255,107,107,.25); background: rgba(255,107,107,.07)}
+    .alert.warn{border-color:rgba(255,204,102,.25); background: rgba(255,204,102,.07)}
+
+    .log{
+      font-size:12px;
+      color:rgba(243,219,160,.70);
+      background: rgba(0,0,0,.25);
+      border:1px solid var(--line2);
+      border-radius:14px;
+      padding:10px;
+      height:220px;
+      overflow:auto;
+      white-space:pre-wrap;
+    }
+
+    .feeTag{
+      display:inline-flex;
+      gap:8px;
+      align-items:center;
+      font-size:11px;
+      color:rgba(255,235,179,.65);
+      border:1px solid rgba(255,210,110,.18);
+      padding:6px 8px;
+      border-radius:999px;
+      background: rgba(0,0,0,.18);
+    }
+
+    .big{
+      font-size:18px;
+      color:var(--gold3);
+      font-weight:900;
+      letter-spacing:.5px;
+    }
+  </style>
 </head>
 
 <body>
-
 <header>
-  <div class="brand">ZEPHENHEL CITADEL</div>
-  <div>
-    <span id="walletStatus" class="status">Wallet disconnected</span>
-    <button id="connectBtn">Connect</button>
+  <div class="top">
+    <div class="brand">
+      <div class="sigil" aria-hidden="true"></div>
+      <div>
+        <h1>ZEPHENHEL CITADEL</h1>
+        <div class="sub">Mythic tri-chain splitter • BSC • Ethereum • Polygon</div>
+      </div>
+    </div>
+
+    <div class="pillrow">
+      <div class="pill"><span class="dot" id="dot"></span><span id="netLabel">Not connected</span></div>
+      <div class="pill mono" id="acctLabel">Wallet: —</div>
+      <button class="btn secondary" id="switchBtn" style="display:none;">Switch Network</button>
+      <button class="btn" id="connectBtn">Connect Wallet</button>
+    </div>
   </div>
 </header>
 
-<div class="container">
+<main>
+  <section class="card">
+    <div class="head">
+      <div>
+        <h2>Distribution Command</h2>
+        <p>Approve ERC20 → execute split on the active chain. Simple percent totals must equal <b>100</b>.</p>
+      </div>
+      <div class="feeTag">Platform fee <b>1%</b> <span class="tiny">(small)</span></div>
+    </div>
 
-  <div class="section-title">Network</div>
-  <div class="box" id="networkBox">Not connected</div>
+    <div class="body">
+      <div class="grid2">
+        <div>
+          <label>Chain mode</label>
+          <select id="chainMode">
+            <option value="bsc">BSC Mainnet</option>
+            <option value="eth">Ethereum Mainnet</option>
+            <option value="polygon">Polygon Mainnet</option>
+          </select>
+        </div>
 
-  <div class="section-title">Wallet Balance</div>
-  <div class="box" id="balanceBox">—</div>
+        <div>
+          <label>Splitter contract (auto)</label>
+          <input id="splitterAddr" class="mono" readonly />
+        </div>
+      </div>
 
-  <div class="section-title">Token Amount</div>
-  <div class="box">
-    <input id="amountInput" type="number" placeholder="0.0" />
-    <small>Platform fee: <b>1%</b></small>
-  </div>
+      <div class="hr"></div>
 
-</div>
+      <div class="grid2">
+        <div>
+          <label>Token contract address</label>
+          <input id="tokenAddr" class="mono" placeholder="0x…" />
+          <div class="tiny" style="margin-top:6px;">Tip: paste BEP20/ERC20 token address for the selected chain.</div>
+        </div>
 
-<div class="footer">
-  Mythic tri-chain splitter • BSC • Ethereum • Polygon
-</div>
+        <div>
+          <label>Amount (token units)</label>
+          <div class="row">
+            <input id="amount" placeholder="0.0" />
+            <button class="btn secondary" id="maxBtn" type="button">MAX</button>
+          </div>
+          <div class="tiny" id="maxHint" style="margin-top:6px;">MAX uses token balance (does not spend your native gas coin).</div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="row" style="justify-content:space-between; gap:12px;">
+        <div class="section-title" style="margin:0; font-size:13px; letter-spacing:.5px; color:var(--gold3); font-weight:800;">
+          Recipients
+        </div>
+        <div class="row">
+          <div class="pill">Total: <b id="pctTotal">0</b>%</div>
+          <button class="btn secondary" id="addRecipient" type="button">+ Add</button>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;" id="recipientsWrap"></div>
+
+      <div class="alert warn" id="pctWarn" style="display:none; margin-top:10px;">
+        Percent total must equal <b>100</b> to execute.
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="grid2">
+        <div class="banner">
+          <b>USD estimate</b><br/>
+          Token price: <span id="priceUsd">—</span><br/>
+          Planned value: <span id="valueUsd">—</span>
+        </div>
+        <div class="banner">
+          <b>Live balances</b><br/>
+          Native: <span id="nativeBal">—</span><br/>
+          Token: <span id="tokenBal">—</span>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="row right">
+        <button class="btn secondary" id="approveBtn" disabled>Approve</button>
+        <button class="btn" id="splitBtn" disabled>Execute Split</button>
+      </div>
+
+      <div class="statusbar">
+        <div class="tiny">Status: <span id="statusText">Ready.</span></div>
+        <div class="tiny mono">Contract: <span id="activeContract">—</span></div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="card">
+    <div class="head">
+      <div>
+        <h2>Runtime Log</h2>
+        <p>When something fails, this log tells us if it’s UI, chain mismatch, allowance, or contract revert.</p>
+      </div>
+      <button class="btn secondary" id="clearLog" type="button">Clear</button>
+    </div>
+    <div class="body">
+      <div class="log mono" id="log"></div>
+      <div style="margin-top:10px" class="alert" id="errBox" style="display:none;"></div>
+      <div class="tiny" style="margin-top:10px; text-align:center;">
+        Always test small amounts first.
+      </div>
+    </div>
+  </aside>
+</main>
+
+<!-- Ethers MUST load before our script uses it -->
+<script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 
 <script>
-let provider, signer;
+(() => {
+  // ====== Your splitter contracts (fixed) ======
+  const SPLITTERS = {
+    bsc: { chainId: 56, name: "BSC Mainnet", addr: "0x928B75D0fA6382D4B742afB6e500C9458B4f502c", dexscreenerChain: "bsc" },
+    eth: { chainId: 1, name: "Ethereum Mainnet", addr: "0x56FeE96eF295Cf282490592403B9A3C1304b91d2", dexscreenerChain: "ethereum" },
+    polygon:{ chainId: 137, name: "Polygon Mainnet", addr: "0x05948E68137eC131E1f0E27028d09fa174679ED4", dexscreenerChain: "polygon" }
+  };
 
-async function connectWallet() {
-  if (!window.ethereum) {
-    alert("MetaMask not detected");
-    return;
+  // ====== Minimal ABIs ======
+  const ERC20_ABI = [
+    "function name() view returns (string)",
+    "function symbol() view returns (string)",
+    "function decimals() view returns (uint8)",
+    "function balanceOf(address) view returns (uint256)",
+    "function allowance(address owner, address spender) view returns (uint256)",
+    "function approve(address spender, uint256 amount) returns (bool)"
+  ];
+
+  // IMPORTANT: This must match your deployed splitter function.
+  // Based on your logs: splitToken(token, amount, recipients, percents)
+  const SPLITTER_ABI = [
+    "function splitToken(address token, uint256 amount, address[] recipients, uint256[] percents) external"
+  ];
+
+  // ====== DOM ======
+  const $ = (id) => document.getElementById(id);
+  const logEl = $("log");
+  const errBox = $("errBox");
+
+  const connectBtn = $("connectBtn");
+  const switchBtn = $("switchBtn");
+  const chainMode = $("chainMode");
+  const splitterAddr = $("splitterAddr");
+  const tokenAddr = $("tokenAddr");
+  const amountEl = $("amount");
+  const maxBtn = $("maxBtn");
+  const addRecipientBtn = $("addRecipient");
+  const recipientsWrap = $("recipientsWrap");
+  const pctTotalEl = $("pctTotal");
+  const pctWarnEl = $("pctWarn");
+
+  const approveBtn = $("approveBtn");
+  const splitBtn = $("splitBtn");
+
+  const netLabel = $("netLabel");
+  const acctLabel = $("acctLabel");
+  const dot = $("dot");
+  const statusText = $("statusText");
+  const activeContract = $("activeContract");
+
+  const nativeBal = $("nativeBal");
+  const tokenBal = $("tokenBal");
+  const priceUsdEl = $("priceUsd");
+  const valueUsdEl = $("valueUsd");
+
+  const clearLog = $("clearLog");
+
+  // ====== Wallet state ======
+  let provider = null;
+  let signer = null;
+  let account = null;
+  let currentChainId = null;
+
+  // token state
+  let token = null;
+  let tokenDecimals = 18;
+  let tokenSymbol = "";
+  let tokenPriceUsd = null;
+
+  // ====== Utility ======
+  function now() {
+    const d = new Date();
+    return d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", second:"2-digit"});
+  }
+  function log(msg){
+    logEl.textContent += `[${now()}] ${msg}\n`;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function setErr(type, msg){
+    if(!msg){
+      errBox.style.display = "none";
+      errBox.textContent = "";
+      errBox.className = "alert";
+      return;
+    }
+    errBox.style.display = "block";
+    errBox.textContent = msg;
+    errBox.className = "alert " + (type || "");
   }
 
-  provider = new ethers.providers.Web3Provider(window.ethereum);
-  await provider.send("eth_requestAccounts", []);
-  signer = provider.getSigner();
+  function setStatus(txt){ statusText.textContent = txt; }
 
-  const address = await signer.getAddress();
-  const network = await provider.getNetwork();
-  const balance = await provider.getBalance(address);
+  function shortAddr(a){
+    if(!a) return "—";
+    return a.slice(0,6) + "…" + a.slice(-4);
+  }
 
-  document.getElementById("walletStatus").innerText =
-    address.slice(0,6) + "..." + address.slice(-4);
+  function hexChainId(n){
+    return "0x" + Number(n).toString(16);
+  }
 
-  document.getElementById("networkBox").innerText =
-    network.name + " (chainId " + network.chainId + ")";
+  // ====== WebAudio sounds (no external files) ======
+  let audioCtx = null;
+  function A(){
+    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
+  }
 
-  document.getElementById("balanceBox").innerText =
-    ethers.utils.formatEther(balance) + " native";
+  function radarPing(){
+    try{
+      const ctx = A();
+      const t0 = ctx.currentTime;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.setValueAtTime(600, t0);
+      o.frequency.exponentialRampToValueAtTime(1200, t0 + 0.08);
+      o.frequency.exponentialRampToValueAtTime(700, t0 + 0.18);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.18, t0 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
+      o.connect(g).connect(ctx.destination);
+      o.start(t0);
+      o.stop(t0 + 0.24);
+    } catch(e){}
+  }
 
-  console.log("Connected:", address);
-}
+  function coinTicks(count){
+    // "as many shares there are": we'll use recipient count (safe), capped.
+    const n = Math.max(1, Math.min(18, count|0));
+    try{
+      const ctx = A();
+      const base = ctx.currentTime;
+      for(let i=0;i<n;i++){
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = "triangle";
+        const t = base + i * 0.06;
+        o.frequency.setValueAtTime(900 + (i%5)*90, t);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.12, t + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+        o.connect(g).connect(ctx.destination);
+        o.start(t);
+        o.stop(t + 0.06);
+      }
+    } catch(e){}
+  }
 
-document.getElementById("connectBtn").onclick = connectWallet;
+  // ====== Recipients UI ======
+  function newRecipientRow(addr="", pct=""){
+    const wrap = document.createElement("div");
+    wrap.className = "recipient";
+
+    const addrInput = document.createElement("input");
+    addrInput.className = "mono";
+    addrInput.placeholder = "Recipient address (0x...)";
+    addrInput.value = addr;
+
+    const pctInput = document.createElement("input");
+    pctInput.placeholder = "%";
+    pctInput.value = pct;
+
+    const del = document.createElement("button");
+    del.className = "xbtn";
+    del.type = "button";
+    del.textContent = "×";
+
+    del.onclick = () => {
+      wrap.remove();
+      refreshPct();
+      refreshButtons();
+      refreshUsdEstimate();
+    };
+
+    addrInput.oninput = () => { refreshButtons(); };
+    pctInput.oninput = () => { refreshPct(); refreshButtons(); refreshUsdEstimate(); };
+
+    wrap.appendChild(addrInput);
+    wrap.appendChild(pctInput);
+    wrap.appendChild(del);
+    return wrap;
+  }
+
+  function getRecipients(){
+    const rows = [...recipientsWrap.querySelectorAll(".recipient")];
+    const recipients = [];
+    const percents = [];
+    for(const r of rows){
+      const inputs = r.querySelectorAll("input");
+      const a = (inputs[0].value || "").trim();
+      const p = (inputs[1].value || "").trim();
+      if(a.length) recipients.push(a);
+      if(p.length) percents.push(Number(p));
+      else percents.push(0);
+    }
+    return { recipients, percents };
+  }
+
+  function refreshPct(){
+    const rows = [...recipientsWrap.querySelectorAll(".recipient")];
+    let total = 0;
+    for(const r of rows){
+      const p = Number((r.querySelectorAll("input")[1].value || "0").trim());
+      total += (isFinite(p) ? p : 0);
+    }
+    pctTotalEl.textContent = String(total);
+    const ok = (total === 100);
+    pctWarnEl.style.display = ok ? "none" : "block";
+    return ok;
+  }
+
+  // ====== Chain / splitter selection ======
+  function selectedMode(){ return chainMode.value; }
+
+  function updateSplitterUI(){
+    const mode = selectedMode();
+    splitterAddr.value = SPLITTERS[mode].addr;
+    activeContract.textContent = SPLITTERS[mode].addr;
+  }
+
+  // ====== MetaMask connect / network ======
+  async function connect(){
+    setErr(null,null);
+    if(!window.ethereum){
+      setErr("bad","MetaMask not detected in this browser. Install MetaMask extension in Edge, then refresh.");
+      return;
+    }
+
+    provider = new ethers.providers.Web3Provider(window.ethereum, "any");
+    try{
+      await provider.send("eth_requestAccounts", []);
+    } catch(e){
+      setErr("bad","Wallet connection rejected.");
+      return;
+    }
+
+    signer = provider.getSigner();
+    account = await signer.getAddress();
+
+    const net = await provider.getNetwork();
+    currentChainId = net.chainId;
+
+    radarPing();
+
+    dot.className = "dot good";
+    acctLabel.textContent = "Wallet: " + shortAddr(account);
+    netLabel.textContent = `${net.name} (chainId ${net.chainId})`;
+    setStatus("Connected.");
+
+    log(`Connected: ${account} on chainId ${net.chainId}`);
+
+    // react to network changes
+    window.ethereum.on?.("accountsChanged", () => window.location.reload());
+    window.ethereum.on?.("chainChanged", () => window.location.reload());
+
+    await refreshBalances();
+    await refreshTokenInfo(); // if token already filled
+    refreshButtons();
+  }
+
+  async function switchNetworkToSelected(){
+    const mode = selectedMode();
+    const target = SPLITTERS[mode].chainId;
+    if(!window.ethereum) return;
+
+    try{
+      await window.ethereum.request({
+        method:"wallet_switchEthereumChain",
+        params:[{ chainId: hexChainId(target) }]
+      });
+    } catch(e){
+      // If chain not added, user must add manually (we keep message short & clear)
+      setErr("warn","Could not switch automatically. In MetaMask, add/switch to the correct network and refresh.");
+    }
+  }
+
+  function chainMatchesSelected(){
+    const mode = selectedMode();
+    const want = SPLITTERS[mode].chainId;
+    return Number(currentChainId) === Number(want);
+  }
+
+  // ====== Balances / token info / USD ======
+  async function refreshBalances(){
+    if(!provider || !account) return;
+
+    const bal = await provider.getBalance(account);
+    const mode = selectedMode();
+    const sym = (mode==="bsc") ? "BNB" : (mode==="polygon" ? "MATIC" : "ETH");
+    nativeBal.textContent = `${Number(ethers.utils.formatEther(bal)).toFixed(6)} ${sym}`;
+
+    // token balance if token loaded
+    if(token){
+      const tb = await token.balanceOf(account);
+      const fmt = ethers.utils.formatUnits(tb, tokenDecimals);
+      tokenBal.textContent = `${Number(fmt).toLocaleString(undefined,{maximumFractionDigits:6})} ${tokenSymbol || ""}`.trim();
+    } else {
+      tokenBal.textContent = "—";
+    }
+  }
+
+  async function fetchDexscreenerPriceUsd(tokenAddress){
+    // Dexscreener returns pairs across chains; choose the selected chain if possible.
+    const mode = selectedMode();
+    const wantChain = SPLITTERS[mode].dexscreenerChain;
+
+    try{
+      const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${tokenAddress}`);
+      if(!res.ok) return null;
+      const data = await res.json();
+      const pairs = data?.pairs || [];
+      if(!pairs.length) return null;
+
+      // pick best pair matching chain, highest liquidity if available
+      const matches = pairs.filter(p => (p.chainId || "").toLowerCase() === wantChain);
+      const list = matches.length ? matches : pairs;
+
+      list.sort((a,b) => (Number(b.liquidity?.usd||0) - Number(a.liquidity?.usd||0)));
+      const best = list[0];
+      const price = Number(best.priceUsd);
+      if(!isFinite(price)) return null;
+      return price;
+    } catch(e){
+      return null;
+    }
+  }
+
+  function refreshUsdEstimate(){
+    const amt = Number((amountEl.value || "0").trim());
+    if(!tokenPriceUsd || !isFinite(tokenPriceUsd) || !isFinite(amt) || amt<=0){
+      valueUsdEl.textContent = "—";
+      return;
+    }
+    const v = amt * tokenPriceUsd;
+    valueUsdEl.textContent = "$" + v.toLocaleString(undefined,{maximumFractionDigits:2});
+  }
+
+  async function refreshTokenInfo(){
+    setErr(null,null);
+    token = null;
+    tokenDecimals = 18;
+    tokenSymbol = "";
+    tokenPriceUsd = null;
+    priceUsdEl.textContent = "—";
+    valueUsdEl.textContent = "—";
+
+    const t = (tokenAddr.value || "").trim();
+    if(!t) { refreshButtons(); await refreshBalances(); return; }
+
+    if(!ethers.utils.isAddress(t)){
+      setErr("warn","Token address is not a valid 0x address.");
+      refreshButtons();
+      return;
+    }
+
+    if(!provider) {
+      // allow reading without connect? Not safely across chains, so wait for connect.
+      refreshButtons();
+      return;
+    }
+
+    try{
+      token = new ethers.Contract(t, ERC20_ABI, signer || provider);
+      tokenDecimals = await token.decimals();
+      tokenSymbol = await token.symbol();
+      log(`Token loaded: ${tokenSymbol} (decimals ${tokenDecimals})`);
+    } catch(e){
+      token = null;
+      setErr("bad","Could not read token contract. Make sure you selected the correct chain for this token.");
+      refreshButtons();
+      return;
+    }
+
+    // price
+    const px = await fetchDexscreenerPriceUsd(t);
+    tokenPriceUsd = px;
+    if(px){
+      priceUsdEl.textContent = "$" + px.toLocaleString(undefined,{maximumFractionDigits:8});
+    } else {
+      priceUsdEl.textContent = "— (Dexscreener unavailable)";
+    }
+
+    await refreshBalances();
+    refreshUsdEstimate();
+    refreshButtons();
+  }
+
+  // ====== Allowance / approve / execute ======
+  async function currentAllowance(){
+    if(!token || !account || !provider) return ethers.BigNumber.from(0);
+    const mode = selectedMode();
+    const spender = SPLITTERS[mode].addr;
+    try{
+      return await token.allowance(account, spender);
+    } catch(e){
+      return ethers.BigNumber.from(0);
+    }
+  }
+
+  function amountToWei(){
+    const raw = (amountEl.value || "0").trim();
+    if(!raw) return ethers.BigNumber.from(0);
+    try{
+      return ethers.utils.parseUnits(raw, tokenDecimals);
+    } catch(e){
+      return null;
+    }
+  }
+
+  async function approve(){
+    setErr(null,null);
+    if(!provider || !signer || !account) return;
+
+    const mode = selectedMode();
+    if(!chainMatchesSelected()){
+      setErr("warn",`Wrong network. Switch MetaMask to ${SPLITTERS[mode].name} then try again.`);
+      return;
+    }
+
+    if(!token){
+      setErr("warn","Load a token first.");
+      return;
+    }
+
+    const amt = amountToWei();
+    if(!amt || amt.lte(0)){
+      setErr("warn","Enter a valid token amount.");
+      return;
+    }
+
+    const spender = SPLITTERS[mode].addr;
+
+    try{
+      setStatus("Sending approve…");
+      log(`Approving ${tokenSymbol} for splitter ${spender}`);
+      const tx = await token.connect(signer).approve(spender, amt);
+      log(`Approve tx: ${tx.hash}`);
+      await tx.wait();
+      setStatus("Approve confirmed ✅");
+      log("Approve confirmed ✅");
+      refreshButtons();
+    } catch(e){
+      setStatus("Approve failed.");
+      setErr("bad", explainEthersError(e));
+      log("Approve failed: " + explainEthersError(e));
+    }
+  }
+
+  async function executeSplit(){
+    setErr(null,null);
+    if(!provider || !signer || !account) return;
+
+    const mode = selectedMode();
+    if(!chainMatchesSelected()){
+      setErr("warn",`Wrong network. Switch MetaMask to ${SPLITTERS[mode].name} then try again.`);
+      return;
+    }
+
+    if(!token){
+      setErr("warn","Load a token first.");
+      return;
+    }
+
+    const amt = amountToWei();
+    if(!amt || amt.lte(0)){
+      setErr("warn","Enter a valid token amount.");
+      return;
+    }
+
+    const pctOk = refreshPct();
+    if(!pctOk){
+      setErr("warn","Percents must total exactly 100.");
+      return;
+    }
+
+    const { recipients, percents } = getRecipients();
+    if(recipients.length < 1){
+      setErr("warn","Add at least one recipient.");
+      return;
+    }
+
+    // validate addresses
+    for(const r of recipients){
+      if(!ethers.utils.isAddress(r)){
+        setErr("warn","One recipient is not a valid 0x address.");
+        return;
+      }
+    }
+
+    // allowance check
+    const allow = await currentAllowance();
+    if(allow.lt(amt)){
+      setErr("warn","Allowance is too low. Click Approve first.");
+      return;
+    }
+
+    // execute
+    try{
+      const splitter = new ethers.Contract(SPLITTERS[mode].addr, SPLITTER_ABI, signer);
+
+      setStatus("Preflight…");
+      log(`Preflight callStatic splitToken(${token.address}, ${amt.toString()}, recipients(${recipients.length}), percents)`);
+
+      // preflight to catch revert reason before spending gas
+      await splitter.callStatic.splitToken(token.address, amt, recipients, percents);
+
+      setStatus("Executing split…");
+      coinTicks(recipients.length);
+
+      const tx = await splitter.splitToken(token.address, amt, recipients, percents);
+      log(`Split tx: ${tx.hash}`);
+      setStatus("Waiting confirmation…");
+      await tx.wait();
+      setStatus("Split complete ✅");
+      log("Split complete ✅");
+
+      await refreshBalances();
+      refreshButtons();
+    } catch(e){
+      setStatus("Split failed.");
+      const msg = explainEthersError(e);
+      setErr("bad", msg);
+      log("Split failed: " + msg);
+    }
+  }
+
+  function explainEthersError(e){
+    const m =
+      e?.error?.message ||
+      e?.data?.message ||
+      e?.reason ||
+      e?.message ||
+      String(e);
+
+    // common friendly trims
+    if(m.includes("UNPREDICTABLE_GAS_LIMIT")) return "Cannot estimate gas (contract would revert). Usually: wrong token/chain, wrong function params, or token requires special handling.";
+    if(m.includes("user rejected")) return "Transaction rejected in MetaMask.";
+    if(m.includes("execution reverted")) return "Execution reverted by contract. Usually: token/amount/allowance/recipient params are invalid for this splitter.";
+    if(m.includes("CALL_EXCEPTION")) return "Call exception (revert). Check chain, token address, allowance, and that percents sum to 100.";
+    return m;
+  }
+
+  async function setMax(){
+    setErr(null,null);
+    if(!token || !account){
+      setErr("warn","Connect wallet and load token first.");
+      return;
+    }
+    try{
+      const b = await token.balanceOf(account);
+      const fmt = ethers.utils.formatUnits(b, tokenDecimals);
+      amountEl.value = (Number(fmt)).toString();
+      refreshUsdEstimate();
+      refreshButtons();
+      log("MAX set to token balance.");
+    } catch(e){
+      setErr("bad","Could not read token balance.");
+    }
+  }
+
+  async function refreshButtons(){
+    updateSplitterUI();
+
+    const connected = !!account && !!provider && !!signer;
+    const mode = selectedMode();
+    const match = connected ? chainMatchesSelected() : false;
+
+    // dot / labels
+    if(!connected){
+      dot.className = "dot";
+      netLabel.textContent = "Not connected";
+      acctLabel.textContent = "Wallet: —";
+      switchBtn.style.display = "none";
+      connectBtn.textContent = "Connect Wallet";
+    } else {
+      dot.className = "dot " + (match ? "good" : "warn");
+      switchBtn.style.display = match ? "none" : "inline-flex";
+      connectBtn.textContent = "Connected";
+    }
+
+    // Enable actions only when:
+    // - connected
+    // - correct chain
+    // - token valid
+    // - amount valid
+    // - percents total 100
+    let amt = amountToWei();
+    const amtOk = amt && amt.gt(0);
+    const pctOk = refreshPct();
+    const tokenOk = !!token;
+
+    approveBtn.disabled = !(connected && match && tokenOk && amtOk);
+    splitBtn.disabled = !(connected && match && tokenOk && amtOk && pctOk);
+
+    // Update balances even if connected
+    if(connected){
+      try{ await refreshBalances(); } catch(e){}
+    }
+
+    // also update USD estimate
+    refreshUsdEstimate();
+  }
+
+  // ====== Init ======
+  function initRecipients(){
+    recipientsWrap.innerHTML = "";
+    recipientsWrap.appendChild(newRecipientRow("", "50"));
+    recipientsWrap.appendChild(newRecipientRow("", "50"));
+    refreshPct();
+  }
+
+  chainMode.onchange = async () => {
+    updateSplitterUI();
+    setErr(null,null);
+    if(provider && account){
+      // after changing mode, we likely need to switch network
+      refreshButtons();
+      await refreshTokenInfo(); // token might be chain-specific; re-read
+    }
+  };
+
+  tokenAddr.onchange = refreshTokenInfo;
+  tokenAddr.onblur = refreshTokenInfo;
+  amountEl.oninput = () => { refreshUsdEstimate(); refreshButtons(); };
+
+  connectBtn.onclick = connect;
+  switchBtn.onclick = switchNetworkToSelected;
+  approveBtn.onclick = approve;
+  splitBtn.onclick = executeSplit;
+  maxBtn.onclick = setMax;
+
+  addRecipientBtn.onclick = () => {
+    recipientsWrap.appendChild(newRecipientRow("", "0"));
+    refreshPct();
+    refreshButtons();
+  };
+
+  clearLog.onclick = () => { logEl.textContent = ""; setErr(null,null); };
+
+  // first render
+  updateSplitterUI();
+  initRecipients();
+  setStatus("Ready. Connect wallet to begin.");
+  log("Boot: ZEPHENHEL CITADEL loaded.");
+  log("Tip: If MetaMask is on the wrong chain, use Switch Network.");
+
+})();
 </script>
-
-<script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
 
 </body>
 </html>
