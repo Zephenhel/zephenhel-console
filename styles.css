@@ -324,3 +324,199 @@ input:focus, select:focus{
   overflow:auto;
   white-space: pre-wrap;
 }
+/* =========================
+   ZEPHENHEL CITADEL — PREMIUM CONSOLE PACK
+   (append to end of styles.css)
+   ========================= */
+
+:root{
+  --neon: rgba(245,196,77,.38);
+  --neon2: rgba(245,196,77,.18);
+  --ok: rgba(34,197,94,.85);
+  --warn: rgba(245,196,77,.75);
+  --bad: rgba(239,68,68,.75);
+}
+
+/* Warframe overlay polish */
+.warframe{
+  position: relative;
+  border-radius: 22px;
+  overflow: hidden;
+  padding: 6px;
+}
+.warframe::before{
+  content:"";
+  position:absolute; inset:0;
+  background:
+    radial-gradient(1200px 800px at 50% 0%, rgba(245,196,77,.06), transparent 55%),
+    radial-gradient(900px 600px at 15% 30%, rgba(245,196,77,.05), transparent 55%),
+    linear-gradient(180deg, rgba(255,255,255,.03), transparent 25%);
+  pointer-events:none;
+  mix-blend-mode: screen;
+}
+.scanlines, .gridlines{
+  pointer-events:none;
+  opacity:.35;
+}
+.scanlines{
+  position:absolute; inset:0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255,255,255,.03) 0px,
+    rgba(255,255,255,.03) 1px,
+    rgba(0,0,0,0) 3px,
+    rgba(0,0,0,0) 7px
+  );
+  animation: scanMove 7s linear infinite;
+}
+@keyframes scanMove{ from{transform:translateY(0)} to{transform:translateY(18px)} }
+
+.gridlines{
+  position:absolute; inset:0;
+  background:
+    linear-gradient(to right, rgba(245,196,77,.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(245,196,77,.06) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(circle at 50% 10%, black 0%, transparent 70%);
+}
+
+/* Topbar "command rail" glow */
+.topbar{
+  box-shadow: 0 12px 40px rgba(0,0,0,.55);
+}
+.topbar-inner{
+  position: relative;
+}
+.topbar-inner::after{
+  content:"";
+  position:absolute; left:0; right:0; bottom:-1px; height:1px;
+  background: linear-gradient(90deg, transparent, rgba(245,196,77,.35), transparent);
+  opacity:.9;
+}
+
+/* Console LED + Radar */
+.console-led{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:7px 10px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.08);
+  background: rgba(18,20,29,.72);
+}
+.led-dot{
+  width:10px; height:10px; border-radius:999px;
+  background: rgba(255,255,255,.25);
+  box-shadow: 0 0 0 rgba(34,197,94,0);
+}
+.led-dot.ok{
+  background: var(--ok);
+  box-shadow: 0 0 18px rgba(34,197,94,.45);
+  animation: ledPulse 1.25s ease-in-out infinite;
+}
+.led-dot.warn{ background: var(--warn); box-shadow:0 0 16px rgba(245,196,77,.28); }
+.led-dot.bad{ background: var(--bad); box-shadow:0 0 16px rgba(239,68,68,.28); }
+@keyframes ledPulse{
+  0%,100%{ transform:scale(1); filter:brightness(1); }
+  50%{ transform:scale(1.18); filter:brightness(1.25); }
+}
+
+.radar{
+  width:34px; height:34px; border-radius:12px;
+  border:1px solid rgba(245,196,77,.22);
+  background:
+    radial-gradient(circle at 50% 50%, rgba(245,196,77,.16), transparent 55%),
+    radial-gradient(circle at 50% 50%, rgba(245,196,77,.08), transparent 70%);
+  position: relative;
+  overflow:hidden;
+  box-shadow: 0 0 18px rgba(245,196,77,.10);
+}
+.radar::before{
+  content:"";
+  position:absolute; inset:-30px;
+  background: conic-gradient(from 0deg,
+    transparent 0deg,
+    rgba(245,196,77,.25) 35deg,
+    transparent 75deg
+  );
+  animation: sweep 2.4s linear infinite;
+  opacity:.65;
+}
+.radar::after{
+  content:"";
+  position:absolute; inset:0;
+  background: radial-gradient(circle at 50% 50%, transparent 0%, rgba(0,0,0,.18) 70%);
+}
+@keyframes sweep{ from{ transform:rotate(0deg) } to{ transform:rotate(360deg) } }
+.radar.off{ opacity:.25; filter:saturate(.7); }
+.radar.off::before{ animation:none; opacity:.15; }
+
+/* Cards: more "glass armor" */
+.card{
+  position:relative;
+}
+.card::before{
+  content:"";
+  position:absolute; inset:0;
+  background: linear-gradient(135deg, rgba(245,196,77,.06), transparent 35%);
+  pointer-events:none;
+}
+.card:hover{
+  border-color: rgba(245,196,77,.18);
+  transform: translateY(-1px);
+  transition: transform .12s ease, border-color .2s ease;
+}
+
+/* Inputs: stronger military green active state */
+input:focus, select:focus, textarea:focus{
+  border-color: rgba(34,197,94,.40);
+  box-shadow: 0 0 0 3px rgba(34,197,94,.12);
+}
+
+/* Buttons: tactical shine */
+.btn.gold{
+  position:relative;
+}
+.btn.gold::after{
+  content:"";
+  position:absolute; inset:0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.20), transparent);
+  transform: translateX(-120%);
+  transition: transform .6s ease;
+  border-radius: 12px;
+}
+.btn.gold:hover::after{ transform: translateX(120%); }
+.btn.ghost:hover{ filter: brightness(1.08); }
+.btn.connected{ letter-spacing:.8px; }
+
+/* Debrief slide-in */
+.notice{
+  animation: popIn .18s ease-out;
+}
+@keyframes popIn{
+  from{ transform: translateY(6px); opacity:0; }
+  to{ transform: translateY(0); opacity:1; }
+}
+
+/* Toast notifications */
+.toast{
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 99999;
+  width: min(420px, calc(100vw - 28px));
+  background: rgba(12,13,19,.88);
+  border:1px solid rgba(245,196,77,.18);
+  border-radius: 16px;
+  padding: 12px 12px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.55);
+  backdrop-filter: blur(10px);
+  animation: toastIn .2s ease-out;
+}
+@keyframes toastIn{
+  from{ transform: translateY(10px); opacity:0; }
+  to{ transform: translateY(0); opacity:1; }
+}
+.toast .t1{ font-weight:900; letter-spacing:.6px; color: var(--gold); font-size:12px; text-transform:uppercase; }
+.toast .t2{ margin-top:4px; font-size:12px; color: rgba(255,255,255,.85); }
+.toast .t3{ margin-top:6px; font-size:11px; color: rgba(255,255,255,.55); }
