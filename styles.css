@@ -644,3 +644,12 @@ input:focus, select:focus, textarea:focus{
   border-radius: 12px;
   color: #ffd4d4;
 }
+/* UI mode behavior */
+body.mode-simple .operator-only { display:none !important; }
+body.mode-operator .operator-only { display:block !important; }
+
+/* Keep the grid clean on small screens (simple mode especially) */
+@media (max-width: 900px){
+  body.mode-operator .grid{ display:block; }
+  body.mode-operator .operator-only{ margin-top: 14px; }
+}
