@@ -1,11 +1,26 @@
-<!-- index.html (FULL OVERWRITE) -->
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>ZEPHENHEL CITADEL</title>
+
+  <!-- You can keep external styles.css -->
   <link rel="stylesheet" href="./styles.css" />
+
+  <!-- Optional hardening: prevent mixed content -->
+  <meta http-equiv="Content-Security-Policy"
+        content="
+        default-src 'self';
+        script-src 'self' https://cdn.jsdelivr.net;
+        style-src 'self' 'unsafe-inline';
+        img-src 'self' data:;
+        connect-src 'self' https: wss:;
+        frame-ancestors 'none';
+        base-uri 'self';
+        form-action 'self';
+        " />
+
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 </head>
 <body>
@@ -16,28 +31,21 @@
         <div class="brand-badge">Z</div>
         <div class="brand-text">
           <h1>ZEPHENHEL CITADEL</h1>
-          <p>Tri-Chain Distribution Console • BSC • Ethereum • Polygon</p>
+          <p>Cyber Warfare Split Console • BSC • Ethereum • Polygon</p>
         </div>
       </div>
 
       <div class="pills">
-        <div class="pill net" id="pillNet">THEATER: —</div>
-        <div class="pill wallet" id="pillWallet">NODE: DISCONNECTED</div>
-
-        <div class="console-led" title="System health">
-          <span class="led-dot" id="ledDot"></span>
-          <span id="ledText">STANDBY</span>
-        </div>
-
-        <div class="radar off" id="radar" title="Radar sweep"></div>
-
-        <button class="btn ghost" id="btnSwitch" title="Switch network">SWITCH THEATER</button>
-        <button class="btn gold" id="btnConnect">LINK NODE</button>
+        <div class="pill net" id="pillNet">Network: —</div>
+        <div class="pill wallet" id="pillWallet">Wallet: Disconnected</div>
+        <button class="btn ghost" id="btnSwitch">Switch Network</button>
+        <button class="btn gold" id="btnConnect">Connect</button>
       </div>
     </div>
   </header>
 
   <main class="container">
+
     <div class="warframe">
       <div class="scanlines"></div>
       <div class="gridlines"></div>
@@ -45,134 +53,151 @@
       <div class="gloworb b"></div>
 
       <div class="grid">
-        <!-- LEFT: COMMAND -->
+        <!-- LEFT: Split Command -->
         <section class="card">
           <div class="card-title">
-            <h2>PAYLOAD COMMAND</h2>
-            <div class="badge">CITADEL</div>
+            <h2>Split Command</h2>
+            <div class="badge">Splitter</div>
           </div>
 
-          <div class="label">THEATER (CHAIN)</div>
+          <div class="label">Active Chain</div>
           <select id="selChain">
-            <option value="bsc">BNB CHAIN</option>
-            <option value="eth">ETHEREUM</option>
-            <option value="polygon">POLYGON</option>
+            <option value="bsc">BSC Mainnet</option>
+            <option value="eth">Ethereum Mainnet</option>
+            <option value="polygon">Polygon Mainnet</option>
           </select>
 
           <div class="hr"></div>
 
-          <div class="label">OPERATION MODE</div>
+          <div class="label">Operation Mode</div>
           <select id="selMode">
-            <option value="token">TOKEN DISTRIBUTION (ERC20/BEP20)</option>
-            <option value="native">NATIVE DISTRIBUTION (BNB/ETH/MATIC)</option>
+            <option value="token">Token Split (ERC20/BEP20)</option>
+            <option value="native" disabled>Native Split (locked — not deployed)</option>
           </select>
           <div class="small" id="modeHint">
-            Token mode: ARM CONTRACT → DEPLOY PAYLOAD. Fee is applied inside the splitter.
+            Token split uses Approve → Execute. Platform fee is applied inside the splitter contract.
           </div>
 
           <div class="hr"></div>
 
           <div id="tokenBlock">
-            <div class="label">ASSET CONTRACT (TOKEN ADDRESS)</div>
+            <div class="label">Token Contract (ERC20 / BEP20)</div>
             <input id="inpToken" placeholder="0x…" spellcheck="false" />
-            <div class="small" id="tokenNote">
-              Assets deliver on the SAME theater you execute on. (BSC USDC ≠ Ethereum USDC)
+            <div class="small" id="tokenSafetyLine">
+              Safety: token contract will be verified (code check) before execution.
             </div>
           </div>
 
           <div class="row2">
             <div>
-              <div class="label">PAYLOAD AMOUNT</div>
+              <div class="label">Amount</div>
               <input id="inpAmount" placeholder="0.0" inputmode="decimal" />
-              <div class="small" id="gasHint">
-                NATIVE MAX reserves gas automatically. Token mode uses exact token amount.
-              </div>
+              <div class="small" id="gasHint">Tokens: enter amount. MAX applies to native only.</div>
             </div>
-
             <div class="miniCard">
-              <div class="miniTitle">INTEL ESTIMATE</div>
+              <div class="miniTitle">Estimate</div>
               <div class="miniValue" id="usdEst">—</div>
-              <div class="miniSub" id="postFeeLine">Post-fee delivery —</div>
+              <div class="miniSub" id="postFeeLine">Post-fee output: —</div>
               <div class="miniSub2">Platform fee: <span class="feeTiny">1%</span></div>
             </div>
           </div>
 
           <div class="btnRow">
-            <button class="btn ghost" id="btnMax">MAX (GAS-SAFE)</button>
-            <button class="btn ghost" id="btnNormalize">NORMALIZE VECTOR</button>
+            <button class="btn ghost" id="btnNormalize">Normalize</button>
+            <button class="btn ghost" id="btnSavePreset">Save Preset</button>
+            <button class="btn ghost" id="btnLoadPreset">Load Preset</button>
           </div>
 
           <div class="hr"></div>
 
           <div class="card-title" style="margin-bottom:6px;">
-            <h2>TARGET MATRIX</h2>
+            <h2>Recipients</h2>
             <div class="inlineBtns">
-              <div class="pill" id="totalPill">VECTOR: —</div>
-              <button class="btn ghost" id="btnAdd">+ ADD TARGET</button>
+              <div class="pill" id="totalPill">Total: 100</div>
+              <button class="btn ghost" id="btnAdd">+ Add</button>
             </div>
-          </div>
-
-          <div class="small" style="margin-bottom:8px;">
-            Allocation Vector uses share weights (e.g., 50/50). NORMALIZE VECTOR sets total to 100.
           </div>
 
           <div id="recipients"></div>
 
+          <div class="hr"></div>
+
+          <div class="label">Distribution Preview (post-fee)</div>
+          <div class="small" id="previewHint">
+            Preview is computed locally + validated by on-chain simulation before execution.
+          </div>
+          <div class="tableWrap">
+            <table class="previewTable" id="previewTable">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Recipient</th>
+                  <th>Share</th>
+                  <th>Amount</th>
+                  <th>Explorer</th>
+                </tr>
+              </thead>
+              <tbody id="previewBody">
+                <tr><td colspan="5" class="mutedCell">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+
           <div class="btnRow">
-            <button class="btn ghost" id="btnApprove">ARM CONTRACT</button>
-            <button class="btn gold" id="btnExecute">DEPLOY PAYLOAD</button>
+            <button class="btn ghost" id="btnApprove">Approve</button>
+            <button class="btn gold" id="btnExecute">Execute Split</button>
           </div>
 
           <div class="notice" id="tipBox">
-            ⚠️ Funds deliver on the active theater. Recipients must view the same chain in their wallet.
+            Hardened launch mode: on-chain preflight simulation + receipt decoding is enabled.
           </div>
 
           <div class="error" id="errBox" style="display:none;"></div>
 
-          <div class="footer-note">Always test small first. Citadel is non-custodial and chain-honest.</div>
+          <div class="footer-note">Always test small amounts first.</div>
         </section>
 
-        <!-- RIGHT: TELEMETRY -->
+        <!-- RIGHT: Live Telemetry -->
         <section class="card">
           <div class="card-title">
-            <h2>LIVE TELEMETRY</h2>
+            <h2>Live Telemetry</h2>
             <label class="soundToggle">
               <input type="checkbox" id="chkSound" checked />
-              <span>SOUND FX</span>
+              <span>Sound FX</span>
             </label>
           </div>
 
           <div class="teleGrid">
             <div class="teleBox">
-              <div class="teleK">NODE BALANCE</div>
+              <div class="teleK">Native Balance</div>
               <div class="teleV" id="teleNative">—</div>
             </div>
             <div class="teleBox">
-              <div class="teleK">ASSET</div>
+              <div class="teleK">Token</div>
               <div class="teleV" id="teleSymbol">—</div>
             </div>
             <div class="teleBox">
-              <div class="teleK">DECIMALS</div>
+              <div class="teleK">Decimals</div>
               <div class="teleV" id="teleDecimals">—</div>
             </div>
             <div class="teleBox">
-              <div class="teleK">ASSET BALANCE</div>
+              <div class="teleK">Token Balance</div>
               <div class="teleV" id="teleTokenBal">—</div>
             </div>
             <div class="teleBox">
-              <div class="teleK">ALLOWANCE → SPLITTER</div>
+              <div class="teleK">Allowance → Splitter</div>
               <div class="teleV" id="teleAllowance">—</div>
             </div>
             <div class="teleBox">
-              <div class="teleK">ACTIVE SPLITTER</div>
+              <div class="teleK">Active Splitter Contract</div>
               <div class="teleV mono" id="teleSplitter">—</div>
             </div>
             <div class="teleBox">
-              <div class="teleK">FEE POLICY</div>
-              <div class="teleV" id="teleFee">—</div>
+              <div class="teleK">Fee Wallet</div>
+              <div class="teleV mono" id="teleFeeWallet">—</div>
             </div>
             <div class="teleBox">
-              <div class="teleK">SYSTEM STATUS</div>
+              <div class="teleK">Status</div>
               <div class="teleV" id="teleStatus">Ready.</div>
             </div>
           </div>
@@ -180,54 +205,33 @@
           <div class="hr"></div>
 
           <div class="card-title" style="margin-bottom:6px;">
-            <h2>MISSION DEBRIEF</h2>
+            <h2>Runtime Log</h2>
             <div class="inlineBtns">
-              <button class="btn ghost" id="btnAddToken">ADD TOKEN TO WALLET</button>
-              <button class="btn ghost" id="btnViewTx">VIEW TX</button>
-            </div>
-          </div>
-
-          <div class="notice" id="debrief" style="display:none;"></div>
-
-          <div class="hr"></div>
-
-          <div class="card-title" style="margin-bottom:6px;">
-            <h2>RUNTIME LOG</h2>
-            <div class="inlineBtns">
-              <button class="btn ghost" id="btnRefresh">REFRESH</button>
-              <button class="btn ghost" id="btnClear">CLEAR</button>
+              <button class="btn ghost" id="btnRefresh">Refresh</button>
+              <button class="btn ghost" id="btnClear">Clear</button>
             </div>
           </div>
 
           <pre class="log" id="log"></pre>
-          <div class="footer-note">Telemetry updates on LINK NODE, asset load, ARM, DEPLOY.</div>
+
+          <div class="footer-note">Public launch hardening enabled: simulation + receipt decode.</div>
         </section>
       </div>
     </div>
+
   </main>
 
   <!-- CONFIRM MODAL -->
-  <div id="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.65); z-index:9999;">
-    <div style="max-width:720px; margin:7vh auto; padding:16px;">
-      <div class="card" style="border-color: rgba(245,196,77,.22);">
-        <div class="card-title">
-          <h2>CONFIRM DEPLOYMENT</h2>
-          <button class="btn ghost" id="btnModalClose">CANCEL</button>
-        </div>
-
-        <div class="notice" id="modalBody"></div>
-
-        <div class="hr"></div>
-
-        <label style="display:flex; gap:10px; align-items:center; font-size:12px; color:rgba(255,255,255,.75);">
-          <input type="checkbox" id="chkAcknowledge" />
-          I understand funds deliver on this theater (chain) and recipients must view the same network.
-        </label>
-
-        <div class="btnRow" style="margin-top:12px;">
-          <button class="btn ghost" id="btnModalBack">BACK</button>
-          <button class="btn gold" id="btnModalConfirm">CONFIRM & DEPLOY</button>
-        </div>
+  <div class="modal" id="confirmModal" style="display:none;">
+    <div class="modalCard">
+      <div class="modalTitle">Confirm Split Execution</div>
+      <div class="modalBody" id="confirmBody"></div>
+      <div class="modalActions">
+        <button class="btn ghost" id="btnCancelModal">Cancel</button>
+        <button class="btn gold" id="btnConfirmModal">CONFIRM + SEND</button>
+      </div>
+      <div class="small modalFoot">
+        You are about to send an on-chain transaction. Double-check chain + token + recipients.
       </div>
     </div>
   </div>
