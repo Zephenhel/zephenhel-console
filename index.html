@@ -5,141 +5,178 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>ZEPHENHEL CITADEL</title>
   <link rel="stylesheet" href="./styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 </head>
 <body>
+
   <header class="topbar">
     <div class="topbar-inner">
       <div class="brand">
         <div class="brand-badge">Z</div>
         <div class="brand-text">
           <h1>ZEPHENHEL CITADEL</h1>
-          <p>Mythic tri-chain splitter • BSC • Ethereum • Polygon <span class="fee-note">• fee: 1% (in contract)</span></p>
+          <p>Mythic tri-chain splitter • BSC • Ethereum • Polygon</p>
         </div>
       </div>
 
       <div class="pills">
-        <span class="pill net" id="pillNet">Network: —</span>
-        <span class="pill wallet" id="pillWallet">Wallet: disconnected</span>
-        <button class="btn gold" id="btnConnect">Connect</button>
+        <div class="pill net" id="pillNet">Network: —</div>
+        <div class="pill wallet" id="pillWallet">Wallet: Disconnected</div>
         <button class="btn ghost" id="btnSwitch">Switch Network</button>
+        <button class="btn gold" id="btnConnect">Connect</button>
       </div>
     </div>
   </header>
 
   <main class="container">
-    <div class="hud">
-      <div class="hud-line"></div>
-      <div class="hud-line"></div>
-      <div class="hud-line"></div>
-    </div>
 
-    <div class="grid">
-      <!-- LEFT: Split -->
-      <section class="card">
-        <div class="card-title">
-          <h2>Split Command</h2>
-          <span class="chip">ERC20</span>
-        </div>
+    <div class="warframe">
+      <div class="scanlines"></div>
+      <div class="gridlines"></div>
+      <div class="gloworb a"></div>
+      <div class="gloworb b"></div>
 
-        <div class="label">Active splitter (auto by network)</div>
-        <input id="splitterAddr" readonly />
-
-        <div class="hr"></div>
-
-        <div class="label">Token contract (ERC20)</div>
-        <input id="tokenAddr" placeholder="0x..." autocomplete="off" spellcheck="false" />
-        <div class="small">Tip: make sure you’re using the correct USDC address for that chain.</div>
-
-        <div class="hr"></div>
-
-        <div class="row2">
-          <div>
-            <div class="label">Amount (token units)</div>
-            <input id="amount" placeholder="e.g. 1.5" inputmode="decimal" />
-            <div class="small">No native splits in this build (token-only).</div>
+      <div class="grid">
+        <!-- LEFT: Split Command -->
+        <section class="card">
+          <div class="card-title">
+            <h2>Split Command</h2>
+            <div class="badge">Splitter</div>
           </div>
-          <div class="sidebox">
-            <div class="sidebox-title">USD estimate</div>
-            <div class="sidebox-big" id="usdEstimate">$—</div>
-            <div class="sidebox-sub">Fee handled by contract</div>
+
+          <div class="label">Chain</div>
+          <select id="selChain">
+            <option value="bsc">BSC Mainnet</option>
+            <option value="eth">Ethereum Mainnet</option>
+            <option value="polygon">Polygon Mainnet</option>
+          </select>
+
+          <div class="hr"></div>
+
+          <div class="label">Mode</div>
+          <select id="selMode">
+            <option value="token">Token Split (ERC20/BEP20)</option>
+            <option value="native">Native Split (BNB/ETH/MATIC)</option>
+          </select>
+          <div class="small" id="modeHint">Tip: Token split uses Approve → Execute.</div>
+
+          <div class="hr"></div>
+
+          <div id="tokenBlock">
+            <div class="label">Token address (ERC20 / BEP20)</div>
+            <input id="inpToken" placeholder="0x…" spellcheck="false" />
           </div>
-        </div>
 
-        <div class="hr"></div>
-
-        <div class="card-title">
-          <h2>Recipients</h2>
-          <div class="right-tools">
-            <span class="pill mini" id="totalPill">Total: 0%</span>
-            <button class="btn ghost mini-btn" id="btnAdd">+ Add</button>
-            <button class="btn ghost mini-btn" id="btnNormalize">Normalize</button>
+          <div class="row2">
+            <div>
+              <div class="label">Amount</div>
+              <input id="inpAmount" placeholder="0.0" inputmode="decimal" />
+              <div class="small" id="gasHint">MAX is for native only. Tokens: enter amount.</div>
+            </div>
+            <div class="miniCard">
+              <div class="miniTitle">USD estimate</div>
+              <div class="miniValue" id="usdEst">—</div>
+              <div class="miniSub" id="postFeeLine">You send (auto-detect) —</div>
+              <div class="miniSub2">Platform fee: <span class="feeTiny">1%</span></div>
+            </div>
           </div>
-        </div>
 
-        <div id="recipients"></div>
+          <div class="btnRow">
+            <button class="btn ghost" id="btnMax">MAX (gas-safe)</button>
+            <button class="btn ghost" id="btnNormalize">Normalize</button>
+          </div>
 
-        <div class="actions">
-          <button class="btn ghost" id="btnApprove">Approve</button>
-          <button class="btn gold" id="btnExecute">Execute Split</button>
-        </div>
+          <div class="hr"></div>
 
-        <div class="notice" id="tipBox">
-          Enter simple percent shares (like 50/50). Citadel will auto-detect whether your splitter expects 100 or 10,000 and which function signature it uses.
-        </div>
+          <div class="card-title" style="margin-bottom:6px;">
+            <h2>Recipients</h2>
+            <div class="inlineBtns">
+              <div class="pill" id="totalPill">Total: 100%</div>
+              <button class="btn ghost" id="btnAdd">+ Add</button>
+            </div>
+          </div>
 
-        <div class="error" id="errBox" style="display:none"></div>
-        <div class="footer-note">Always test small amounts first.</div>
-      </section>
+          <div id="recipients"></div>
 
-      <!-- RIGHT: Telemetry -->
-      <aside class="card">
-        <div class="card-title">
-          <h2>Live Telemetry</h2>
-          <div class="right-tools">
-            <label class="toggle">
-              <input type="checkbox" id="soundToggle" checked />
+          <div class="btnRow">
+            <button class="btn ghost" id="btnApprove">Approve</button>
+            <button class="btn gold" id="btnExecute">Execute Split</button>
+          </div>
+
+          <div class="notice" id="tipBox">
+            Citadel will auto-detect whether your splitter expects totals of 100 or 10,000
+            AND whether it expects the amount BEFORE or AFTER the 1% fee.
+          </div>
+
+          <div class="error" id="errBox" style="display:none;"></div>
+
+          <div class="footer-note">Always test small amounts first.</div>
+        </section>
+
+        <!-- RIGHT: Live Telemetry -->
+        <section class="card">
+          <div class="card-title">
+            <h2>Live Telemetry</h2>
+            <label class="soundToggle">
+              <input type="checkbox" id="chkSound" checked />
               <span>Sound FX</span>
             </label>
-            <button class="btn ghost mini-btn" id="btnClearLog">Clear</button>
-            <button class="btn ghost mini-btn" id="btnRefresh">Refresh</button>
           </div>
-        </div>
 
-        <div class="tele-grid">
-          <div class="tele-card">
-            <div class="tele-k">Native balance</div>
-            <div class="tele-v" id="nativeBal">—</div>
+          <div class="teleGrid">
+            <div class="teleBox">
+              <div class="teleK">Native balance</div>
+              <div class="teleV" id="teleNative">—</div>
+            </div>
+            <div class="teleBox">
+              <div class="teleK">Token symbol</div>
+              <div class="teleV" id="teleSymbol">—</div>
+            </div>
+            <div class="teleBox">
+              <div class="teleK">Decimals</div>
+              <div class="teleV" id="teleDecimals">—</div>
+            </div>
+            <div class="teleBox">
+              <div class="teleK">Token balance</div>
+              <div class="teleV" id="teleTokenBal">—</div>
+            </div>
+            <div class="teleBox">
+              <div class="teleK">Allowance → splitter</div>
+              <div class="teleV" id="teleAllowance">—</div>
+            </div>
+            <div class="teleBox">
+              <div class="teleK">Active splitter contract</div>
+              <div class="teleV mono" id="teleSplitter">—</div>
+            </div>
+            <div class="teleBox">
+              <div class="teleK">Auto-detected mode</div>
+              <div class="teleV" id="teleDetected">—</div>
+            </div>
+            <div class="teleBox">
+              <div class="teleK">Status</div>
+              <div class="teleV" id="teleStatus">Ready.</div>
+            </div>
           </div>
-          <div class="tele-card">
-            <div class="tele-k">Token symbol</div>
-            <div class="tele-v" id="tokenSym">—</div>
-          </div>
-          <div class="tele-card">
-            <div class="tele-k">Token decimals</div>
-            <div class="tele-v" id="tokenDec">—</div>
-          </div>
-          <div class="tele-card">
-            <div class="tele-k">Token balance</div>
-            <div class="tele-v" id="tokenBal">—</div>
-          </div>
-          <div class="tele-card">
-            <div class="tele-k">Allowance → splitter</div>
-            <div class="tele-v" id="allowance">—</div>
-          </div>
-          <div class="tele-card">
-            <div class="tele-k">Detected mode</div>
-            <div class="tele-v" id="detectedMode">—</div>
-          </div>
-        </div>
 
-        <div class="hr"></div>
+          <div class="hr"></div>
 
-        <div class="log" id="log"></div>
-      </aside>
+          <div class="card-title" style="margin-bottom:6px;">
+            <h2>Runtime Log</h2>
+            <div class="inlineBtns">
+              <button class="btn ghost" id="btnRefresh">Refresh</button>
+              <button class="btn ghost" id="btnClear">Clear</button>
+            </div>
+          </div>
+
+          <pre class="log" id="log"></pre>
+
+          <div class="footer-note">Citadel telemetry updates on connect, token load, approve, execute.</div>
+        </section>
+      </div>
     </div>
+
   </main>
 
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
