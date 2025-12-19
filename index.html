@@ -6,226 +6,95 @@
   <title>ZEPHENHEL CITADEL</title>
 
   <link rel="stylesheet" href="./styles.css" />
-
-  <meta http-equiv="Content-Security-Policy"
-        content="
-        default-src 'self';
-        script-src 'self' https://cdn.jsdelivr.net;
-        style-src 'self' 'unsafe-inline';
-        img-src 'self' data:;
-        connect-src 'self' https: wss:;
-        frame-ancestors 'none';
-        base-uri 'self';
-        form-action 'self';
-        " />
-
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 </head>
+<body>
 
-<body class="mode-simple">
-  <header class="topbar">
-    <div class="topbar-inner">
-      <div class="brand">
-        <div class="brand-badge">Z</div>
-        <div class="brand-text">
-          <h1>ZEPHENHEL CITADEL</h1>
-          <p>Split Console • BSC • Ethereum • Polygon</p>
-        </div>
-      </div>
-
-      <div class="pills">
-        <div class="pill net" id="pillNet">Network: —</div>
-        <div class="pill wallet" id="pillWallet">Wallet: Disconnected</div>
-
-        <!-- SIMPLE / OPERATOR TOGGLE -->
-        <button class="btn ghost" id="btnUIMode" title="Toggle Operator Console">
-          Operator Console: OFF
-        </button>
-
-        <button class="btn ghost" id="btnSwitch">Switch Network</button>
-        <button class="btn gold" id="btnConnect">Connect</button>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="brand-badge">Z</div>
+      <div>
+        <h1>ZEPHENHEL CITADEL</h1>
+        <p>Tri-chain token splitter • BSC • Ethereum • Polygon</p>
       </div>
     </div>
-  </header>
 
-  <main class="container">
-    <div class="warframe">
-      <div class="scanlines"></div>
-      <div class="gridlines"></div>
-      <div class="gloworb a"></div>
-      <div class="gloworb b"></div>
-
-      <div class="grid">
-        <!-- LEFT: MAIN (always visible) -->
-        <section class="card">
-          <div class="card-title">
-            <h2>Split</h2>
-            <div class="badge">Token</div>
-          </div>
-
-          <div class="label">Chain</div>
-          <select id="selChain">
-            <option value="bsc">BSC Mainnet</option>
-            <option value="eth">Ethereum Mainnet</option>
-            <option value="polygon">Polygon Mainnet</option>
-          </select>
-
-          <div class="hr"></div>
-
-          <div class="label">Token Contract</div>
-          <input id="inpToken" placeholder="0x…" spellcheck="false" />
-          <div class="small" id="tokenSafetyLine">
-            Paste token address on the selected chain.
-          </div>
-
-          <div class="row2">
-            <div>
-              <div class="label">Amount</div>
-              <input id="inpAmount" placeholder="0.0" inputmode="decimal" />
-              <div class="small" id="gasHint">Enter token amount.</div>
-            </div>
-            <div class="miniCard">
-              <div class="miniTitle">Estimate</div>
-              <div class="miniValue" id="usdEst">—</div>
-              <div class="miniSub" id="postFeeLine">Post-fee output: —</div>
-              <div class="miniSub2">Platform fee: <span class="feeTiny">1%</span></div>
-            </div>
-          </div>
-
-          <div class="btnRow">
-            <button class="btn ghost" id="btnNormalize">Normalize</button>
-            <button class="btn ghost" id="btnSavePreset">Save</button>
-            <button class="btn ghost" id="btnLoadPreset">Load</button>
-          </div>
-
-          <div class="hr"></div>
-
-          <div class="card-title" style="margin-bottom:6px;">
-            <h2>Recipients</h2>
-            <div class="inlineBtns">
-              <div class="pill" id="totalPill">Total: 100</div>
-              <button class="btn ghost" id="btnAdd">+ Add</button>
-            </div>
-          </div>
-
-          <div id="recipients"></div>
-
-          <div class="hr"></div>
-
-          <div class="label">Preview (post-fee)</div>
-          <div class="small" id="previewHint">
-            Preview is computed locally and validated by preflight simulation.
-          </div>
-
-          <div class="tableWrap">
-            <table class="previewTable">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Recipient</th>
-                  <th>Share</th>
-                  <th>Amount</th>
-                  <th>Explorer</th>
-                </tr>
-              </thead>
-              <tbody id="previewBody">
-                <tr><td colspan="5" class="mutedCell">—</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div class="btnRow">
-            <button class="btn ghost" id="btnApprove">Approve</button>
-            <button class="btn gold" id="btnExecute">Execute</button>
-          </div>
-
-          <div class="notice" id="tipBox">
-            Simple Mode: clean UX. Operator Console: telemetry + logs + deeper diagnostics.
-          </div>
-
-          <div class="error" id="errBox" style="display:none;"></div>
-
-          <div class="footer-note">Always test small amounts first.</div>
-        </section>
-
-        <!-- RIGHT: OPERATOR CONSOLE (hidden in Simple Mode) -->
-        <section class="card operator-only" id="operatorPanel">
-          <div class="card-title">
-            <h2>Operator Console</h2>
-            <label class="soundToggle">
-              <input type="checkbox" id="chkSound" checked />
-              <span>Sound FX</span>
-            </label>
-          </div>
-
-          <div class="teleGrid">
-            <div class="teleBox">
-              <div class="teleK">Native Balance</div>
-              <div class="teleV" id="teleNative">—</div>
-            </div>
-            <div class="teleBox">
-              <div class="teleK">Token</div>
-              <div class="teleV" id="teleSymbol">—</div>
-            </div>
-            <div class="teleBox">
-              <div class="teleK">Decimals</div>
-              <div class="teleV" id="teleDecimals">—</div>
-            </div>
-            <div class="teleBox">
-              <div class="teleK">Token Balance</div>
-              <div class="teleV" id="teleTokenBal">—</div>
-            </div>
-            <div class="teleBox">
-              <div class="teleK">Allowance → Splitter</div>
-              <div class="teleV" id="teleAllowance">—</div>
-            </div>
-            <div class="teleBox">
-              <div class="teleK">Active Splitter</div>
-              <div class="teleV mono" id="teleSplitter">—</div>
-            </div>
-            <div class="teleBox">
-              <div class="teleK">Fee Wallet</div>
-              <div class="teleV mono" id="teleFeeWallet">—</div>
-            </div>
-            <div class="teleBox">
-              <div class="teleK">Status</div>
-              <div class="teleV" id="teleStatus">Ready.</div>
-            </div>
-          </div>
-
-          <div class="hr"></div>
-
-          <div class="card-title" style="margin-bottom:6px;">
-            <h2>Runtime Log</h2>
-            <div class="inlineBtns">
-              <button class="btn ghost" id="btnRefresh">Refresh</button>
-              <button class="btn ghost" id="btnClear">Clear</button>
-            </div>
-          </div>
-
-          <pre class="log" id="log"></pre>
-
-          <div class="footer-note">Operator console is for debugging + proof.</div>
-        </section>
-      </div>
-    </div>
-  </main>
-
-  <!-- CONFIRM MODAL -->
-  <div class="modal" id="confirmModal" style="display:none;">
-    <div class="modalCard">
-      <div class="modalTitle">Confirm Split Execution</div>
-      <div class="modalBody" id="confirmBody"></div>
-      <div class="modalActions">
-        <button class="btn ghost" id="btnCancelModal">Cancel</button>
-        <button class="btn gold" id="btnConfirmModal">CONFIRM + SEND</button>
-      </div>
-      <div class="small modalFoot">
-        You are about to send an on-chain transaction. Verify chain + token + recipients.
-      </div>
+    <div class="pills">
+      <div class="pill" id="pillNet">Network: —</div>
+      <div class="pill" id="pillWallet">Wallet: Disconnected</div>
+      <button class="btn ghost" id="btnSwitch">Switch</button>
+      <button class="btn gold" id="btnConnect">Connect</button>
     </div>
   </div>
+</header>
 
-  <script src="./app.js"></script>
+<main class="container">
+  <div class="grid">
+
+    <!-- LEFT -->
+    <section class="card">
+      <h2>Split Command</h2>
+
+      <label>Chain</label>
+      <select id="selChain">
+        <option value="bsc">BSC Mainnet</option>
+        <option value="eth">Ethereum</option>
+        <option value="polygon">Polygon</option>
+      </select>
+
+      <hr>
+
+      <label>Token address (ERC20 / BEP20)</label>
+      <input id="inpToken" placeholder="0x…" spellcheck="false" />
+
+      <label>Amount</label>
+      <input id="inpAmount" placeholder="1.0" inputmode="decimal" />
+
+      <div class="notice">
+        Platform fee: <b>1%</b> (handled by contract)
+      </div>
+
+      <hr>
+
+      <h3>Recipients</h3>
+      <div id="recipients"></div>
+
+      <div class="row-actions">
+        <span id="totalPill">Total: 100</span>
+        <button class="btn ghost" id="btnAdd">+ Add</button>
+      </div>
+
+      <div class="row-actions">
+        <button class="btn ghost" id="btnApprove">Approve</button>
+        <button class="btn gold" id="btnExecute">Execute Split</button>
+      </div>
+
+      <div class="error" id="errBox" style="display:none"></div>
+      <p class="footer-note">Always test small amounts first.</p>
+    </section>
+
+    <!-- RIGHT -->
+    <section class="card">
+      <h2>Live Telemetry</h2>
+
+      <div class="tele">
+        <div>Native balance: <span id="teleNative">—</span></div>
+        <div>Token symbol: <span id="teleSymbol">—</span></div>
+        <div>Decimals: <span id="teleDecimals">—</span></div>
+        <div>Token balance: <span id="teleTokenBal">—</span></div>
+        <div>Allowance → splitter: <span id="teleAllowance">—</span></div>
+        <div>Active splitter: <span id="teleSplitter">—</span></div>
+        <div>Status: <span id="teleStatus">Ready</span></div>
+      </div>
+
+      <h3>Runtime Log</h3>
+      <pre class="log" id="log"></pre>
+    </section>
+
+  </div>
+</main>
+
+<script src="./app.js"></script>
 </body>
 </html>
