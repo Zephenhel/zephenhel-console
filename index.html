@@ -5,10 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>ZEPHENHEL CITADEL</title>
 
-  <!-- You can keep external styles.css -->
   <link rel="stylesheet" href="./styles.css" />
 
-  <!-- Optional hardening: prevent mixed content -->
   <meta http-equiv="Content-Security-Policy"
         content="
         default-src 'self';
@@ -23,21 +21,27 @@
 
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 </head>
-<body>
 
+<body class="mode-simple">
   <header class="topbar">
     <div class="topbar-inner">
       <div class="brand">
         <div class="brand-badge">Z</div>
         <div class="brand-text">
           <h1>ZEPHENHEL CITADEL</h1>
-          <p>Cyber Warfare Split Console • BSC • Ethereum • Polygon</p>
+          <p>Split Console • BSC • Ethereum • Polygon</p>
         </div>
       </div>
 
       <div class="pills">
         <div class="pill net" id="pillNet">Network: —</div>
         <div class="pill wallet" id="pillWallet">Wallet: Disconnected</div>
+
+        <!-- SIMPLE / OPERATOR TOGGLE -->
+        <button class="btn ghost" id="btnUIMode" title="Toggle Operator Console">
+          Operator Console: OFF
+        </button>
+
         <button class="btn ghost" id="btnSwitch">Switch Network</button>
         <button class="btn gold" id="btnConnect">Connect</button>
       </div>
@@ -45,7 +49,6 @@
   </header>
 
   <main class="container">
-
     <div class="warframe">
       <div class="scanlines"></div>
       <div class="gridlines"></div>
@@ -53,14 +56,14 @@
       <div class="gloworb b"></div>
 
       <div class="grid">
-        <!-- LEFT: Split Command -->
+        <!-- LEFT: MAIN (always visible) -->
         <section class="card">
           <div class="card-title">
-            <h2>Split Command</h2>
-            <div class="badge">Splitter</div>
+            <h2>Split</h2>
+            <div class="badge">Token</div>
           </div>
 
-          <div class="label">Active Chain</div>
+          <div class="label">Chain</div>
           <select id="selChain">
             <option value="bsc">BSC Mainnet</option>
             <option value="eth">Ethereum Mainnet</option>
@@ -69,30 +72,17 @@
 
           <div class="hr"></div>
 
-          <div class="label">Operation Mode</div>
-          <select id="selMode">
-            <option value="token">Token Split (ERC20/BEP20)</option>
-            <option value="native" disabled>Native Split (locked — not deployed)</option>
-          </select>
-          <div class="small" id="modeHint">
-            Token split uses Approve → Execute. Platform fee is applied inside the splitter contract.
-          </div>
-
-          <div class="hr"></div>
-
-          <div id="tokenBlock">
-            <div class="label">Token Contract (ERC20 / BEP20)</div>
-            <input id="inpToken" placeholder="0x…" spellcheck="false" />
-            <div class="small" id="tokenSafetyLine">
-              Safety: token contract will be verified (code check) before execution.
-            </div>
+          <div class="label">Token Contract</div>
+          <input id="inpToken" placeholder="0x…" spellcheck="false" />
+          <div class="small" id="tokenSafetyLine">
+            Paste token address on the selected chain.
           </div>
 
           <div class="row2">
             <div>
               <div class="label">Amount</div>
               <input id="inpAmount" placeholder="0.0" inputmode="decimal" />
-              <div class="small" id="gasHint">Tokens: enter amount. MAX applies to native only.</div>
+              <div class="small" id="gasHint">Enter token amount.</div>
             </div>
             <div class="miniCard">
               <div class="miniTitle">Estimate</div>
@@ -104,8 +94,8 @@
 
           <div class="btnRow">
             <button class="btn ghost" id="btnNormalize">Normalize</button>
-            <button class="btn ghost" id="btnSavePreset">Save Preset</button>
-            <button class="btn ghost" id="btnLoadPreset">Load Preset</button>
+            <button class="btn ghost" id="btnSavePreset">Save</button>
+            <button class="btn ghost" id="btnLoadPreset">Load</button>
           </div>
 
           <div class="hr"></div>
@@ -122,12 +112,13 @@
 
           <div class="hr"></div>
 
-          <div class="label">Distribution Preview (post-fee)</div>
+          <div class="label">Preview (post-fee)</div>
           <div class="small" id="previewHint">
-            Preview is computed locally + validated by on-chain simulation before execution.
+            Preview is computed locally and validated by preflight simulation.
           </div>
+
           <div class="tableWrap">
-            <table class="previewTable" id="previewTable">
+            <table class="previewTable">
               <thead>
                 <tr>
                   <th>#</th>
@@ -145,11 +136,11 @@
 
           <div class="btnRow">
             <button class="btn ghost" id="btnApprove">Approve</button>
-            <button class="btn gold" id="btnExecute">Execute Split</button>
+            <button class="btn gold" id="btnExecute">Execute</button>
           </div>
 
           <div class="notice" id="tipBox">
-            Hardened launch mode: on-chain preflight simulation + receipt decoding is enabled.
+            Simple Mode: clean UX. Operator Console: telemetry + logs + deeper diagnostics.
           </div>
 
           <div class="error" id="errBox" style="display:none;"></div>
@@ -157,10 +148,10 @@
           <div class="footer-note">Always test small amounts first.</div>
         </section>
 
-        <!-- RIGHT: Live Telemetry -->
-        <section class="card">
+        <!-- RIGHT: OPERATOR CONSOLE (hidden in Simple Mode) -->
+        <section class="card operator-only" id="operatorPanel">
           <div class="card-title">
-            <h2>Live Telemetry</h2>
+            <h2>Operator Console</h2>
             <label class="soundToggle">
               <input type="checkbox" id="chkSound" checked />
               <span>Sound FX</span>
@@ -189,7 +180,7 @@
               <div class="teleV" id="teleAllowance">—</div>
             </div>
             <div class="teleBox">
-              <div class="teleK">Active Splitter Contract</div>
+              <div class="teleK">Active Splitter</div>
               <div class="teleV mono" id="teleSplitter">—</div>
             </div>
             <div class="teleBox">
@@ -214,11 +205,10 @@
 
           <pre class="log" id="log"></pre>
 
-          <div class="footer-note">Public launch hardening enabled: simulation + receipt decode.</div>
+          <div class="footer-note">Operator console is for debugging + proof.</div>
         </section>
       </div>
     </div>
-
   </main>
 
   <!-- CONFIRM MODAL -->
@@ -231,7 +221,7 @@
         <button class="btn gold" id="btnConfirmModal">CONFIRM + SEND</button>
       </div>
       <div class="small modalFoot">
-        You are about to send an on-chain transaction. Double-check chain + token + recipients.
+        You are about to send an on-chain transaction. Verify chain + token + recipients.
       </div>
     </div>
   </div>
