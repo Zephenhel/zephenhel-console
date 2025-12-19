@@ -520,3 +520,127 @@ input:focus, select:focus, textarea:focus{
 .toast .t1{ font-weight:900; letter-spacing:.6px; color: var(--gold); font-size:12px; text-transform:uppercase; }
 .toast .t2{ margin-top:4px; font-size:12px; color: rgba(255,255,255,.85); }
 .toast .t3{ margin-top:6px; font-size:11px; color: rgba(255,255,255,.55); }
+/* ===== Preview table ===== */
+.tableWrap{
+  border:1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  overflow:hidden;
+  background: rgba(7,8,12,.35);
+}
+
+.previewTable{
+  width:100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.previewTable thead th{
+  text-align:left;
+  padding:10px 10px;
+  color: var(--gold);
+  background: rgba(245,196,77,.06);
+  border-bottom:1px solid rgba(255,255,255,.08);
+}
+
+.previewTable td{
+  padding:10px 10px;
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+
+.previewTable tr:last-child td{ border-bottom:none; }
+
+.mutedCell{
+  color: rgba(255,255,255,.45);
+  text-align:center;
+  padding: 14px !important;
+}
+
+.previewTable a{
+  color: var(--gold);
+  text-decoration:none;
+}
+.previewTable a:hover{ text-decoration: underline; }
+
+/* ===== Modal ===== */
+.modal{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.65);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index: 9999;
+  padding: 18px;
+}
+
+.modalCard{
+  width: min(760px, 96vw);
+  border-radius: 18px;
+  border: 1px solid rgba(245,196,77,.22);
+  background: linear-gradient(180deg, rgba(16,18,26,.95), rgba(8,9,12,.95));
+  box-shadow: 0 25px 70px rgba(0,0,0,.65);
+  padding: 14px;
+}
+
+.modalTitle{
+  font-weight: 900;
+  letter-spacing: .8px;
+  color: var(--gold);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+
+.modalBody{
+  font-size: 12px;
+  color: rgba(255,255,255,.88);
+  max-height: 56vh;
+  overflow:auto;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(7,8,12,.45);
+}
+
+.modalActions{
+  display:flex;
+  gap: 10px;
+  justify-content:flex-end;
+  margin-top: 12px;
+}
+
+.modalFoot{
+  margin-top: 8px;
+  color: rgba(255,255,255,.45);
+}
+
+.confirmHeader{
+  margin-top: 10px;
+  color: var(--gold);
+  font-weight: 800;
+  letter-spacing: .5px;
+}
+
+.confirmLine{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom:1px dashed rgba(255,255,255,.10);
+}
+.confirmLine:last-child{ border-bottom:none; }
+
+.confirmLine a{
+  color: var(--gold);
+  text-decoration:none;
+}
+.confirmLine a:hover{ text-decoration: underline; }
+
+.warnBox{
+  margin: 10px 0;
+  border: 1px solid rgba(239,68,68,.25);
+  background: rgba(239,68,68,.08);
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: #ffd4d4;
+}
