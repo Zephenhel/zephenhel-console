@@ -1,4 +1,3 @@
-<!-- index.html (FULL OVERWRITE) -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -23,13 +22,6 @@
       <div class="pills">
         <div class="pill net" id="pillNet">THEATER: —</div>
         <div class="pill wallet" id="pillWallet">NODE: DISCONNECTED</div>
-
-        <div class="console-led" title="System health">
-          <span class="led-dot" id="ledDot"></span>
-          <span id="ledText">STANDBY</span>
-        </div>
-
-        <div class="radar off" id="radar" title="Radar sweep"></div>
 
         <button class="btn ghost" id="btnSwitch" title="Switch network">SWITCH THEATER</button>
         <button class="btn gold" id="btnConnect">LINK NODE</button>
@@ -76,7 +68,7 @@
             <div class="label">ASSET CONTRACT (TOKEN ADDRESS)</div>
             <input id="inpToken" placeholder="0x…" spellcheck="false" />
             <div class="small" id="tokenNote">
-              Assets deliver on the SAME theater you execute on. (BSC USDC ≠ Ethereum USDC)
+              Assets arrive on the SAME theater you execute on. (BSC USDC ≠ Ethereum USDC)
             </div>
           </div>
 
@@ -124,7 +116,7 @@
           </div>
 
           <div class="notice" id="tipBox">
-            ⚠️ Funds deliver on the active theater. Recipients must view the same chain in their wallet.
+            ⚠️ Assets deliver on the active theater. Recipients must view the same chain in their wallet.
           </div>
 
           <div class="error" id="errBox" style="display:none;"></div>
@@ -183,7 +175,7 @@
             <h2>MISSION DEBRIEF</h2>
             <div class="inlineBtns">
               <button class="btn ghost" id="btnAddToken">ADD TOKEN TO WALLET</button>
-              <button class="btn ghost" id="btnViewTx">VIEW TX</button>
+              <button class="btn ghost" id="btnViewTx">VIEW TRANSFERS</button>
             </div>
           </div>
 
@@ -214,7 +206,6 @@
           <h2>CONFIRM DEPLOYMENT</h2>
           <button class="btn ghost" id="btnModalClose">CANCEL</button>
         </div>
-
         <div class="notice" id="modalBody"></div>
 
         <div class="hr"></div>
