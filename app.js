@@ -14,7 +14,6 @@
       nativeSymbol: "BNB",
       explorer: "https://bscscan.com",
       splitter: "0x928B75D0fA6382D4B742afB6e500C9458B4f502c",
-      vault: "0x69BD92784b9ED63a40d2cf51b475Ba68B37bD59E",
     },
     eth: {
       chainId: 1,
@@ -24,7 +23,6 @@
       nativeSymbol: "ETH",
       explorer: "https://etherscan.io",
       splitter: "0x56FeE96eF295Cf282490592403B9A3C1304b91d2",
-      vault: "0x886f915D21A5BC540E86655a89e6223981D875d8",
     },
     polygon: {
       chainId: 137,
@@ -34,7 +32,6 @@
       nativeSymbol: "MATIC",
       explorer: "https://polygonscan.com",
       splitter: "0x05948E68137eC131E1f0E27028d09fa174679ED4",
-      vault: "0xde07160A2eC236315Dd27e9600f88Ba26F86f06e",
     },
   };
 
@@ -56,15 +53,17 @@
   ];
 
   /***********************
-   * DOM
+   * DOM (hard fail if missing)
    ***********************/
   const $ = (id) => document.getElementById(id);
 
   const el = {
     pillNet: $("pillNet"),
     pillWallet: $("pillWallet"),
+    btnToggleOps: $("btnToggleOps"),
     btnSwitch: $("btnSwitch"),
     btnConnect: $("btnConnect"),
+
     selChain: $("selChain"),
     selMode: $("selMode"),
     modeHint: $("modeHint"),
@@ -72,8 +71,7 @@
     tokenBlock: $("tokenBlock"),
     inpToken: $("inpToken"),
     inpAmount: $("inpAmount"),
-    btnMax: $("btnMax"),
-    btnNormalize: $("btnNormalize"),
+    tokenNote: $("tokenNote"),
 
     usdEst: $("usdEst"),
     postFeeLine: $("postFeeLine"),
@@ -82,6 +80,7 @@
     recipients: $("recipients"),
     totalPill: $("totalPill"),
     btnAdd: $("btnAdd"),
+    btnNormalize: $("btnNormalize"),
 
     btnApprove: $("btnApprove"),
     btnExecute: $("btnExecute"),
@@ -108,7 +107,8 @@
     btnClear: $("btnClear"),
     log: $("log"),
 
-    // modal
+    opsHint: $("opsHint"),
+
     modal: $("modal"),
     modalBody: $("modalBody"),
     btnModalClose: $("btnModalClose"),
@@ -124,6 +124,7 @@
   let signer = null;
   let userAddress = null;
   let currentChainKey = "bsc";
+
   let splitter = null;
 
   let token = null;
@@ -136,6 +137,9 @@
   let lastTxHash = null;
   let lastExplorerLink = null;
 
+  // UI: default simple mode
+  let operatorMode = false;
+
   // recipients model
   let rows = [
     { account: "", share: "50" },
@@ -143,7 +147,37 @@
   ];
 
   /***********************
-   * LOGGING + UI HELPERS
+   * HELPERS
+   ***********************/
+  function activeCfg() {
+    return CONTRACTS[currentChainKey];
+  }
+
+  function shortAddr(a) {
+    if (!a || a.length < 10) return a || "—";
+    return `${a.slice(0, 6)}…${a.slice(-4)}`;
+  }
+
+  function isAddr(a) {
+    try { return ethers.utils.isAddress(a); } catch { return false; }
+  }
+
+  function checksum(a) {
+    return ethers.utils.getAddress(a);
+  }
+
+  function toBN(n) {
+    return ethers.BigNumber.from(String(n));
+  }
+
+  function clampInt(n, min, max) {
+    n = Math.floor(Number(n));
+    if (Number.isNaN(n)) return min;
+    return Math.max(min, Math.min(max, n));
+  }
+
+  /***********************
+   * LOGGING
    ***********************/
   function log(line) {
     const ts = new Date().toLocaleTimeString();
@@ -161,48 +195,13 @@
     log(msg);
   }
 
-  function shortAddr(a) {
-    if (!a || a.length < 10) return a || "—";
-    return `${a.slice(0, 6)}…${a.slice(-4)}`;
-  }
-
-  function isAddr(a) {
-    try {
-      return ethers.utils.isAddress(a);
-    } catch {
-      return false;
-    }
-  }
-
-  function toBN(val) {
-    return ethers.BigNumber.from(val.toString());
-  }
-
-  function clampInt(n, min, max) {
-    n = Math.floor(Number(n));
-    if (Number.isNaN(n)) return min;
-    return Math.max(min, Math.min(max, n));
-  }
-
-  function activeCfg() {
-    return CONTRACTS[currentChainKey];
-  }
-
-  function fmtUnits(x) {
-    return ethers.utils.formatUnits(x, tokenDecimals);
-  }
-
-  function cfgNativeSymbol() {
-    return activeCfg()?.nativeSymbol || "NATIVE";
-  }
-
   function setDebrief(html) {
     el.debrief.style.display = html ? "block" : "none";
     el.debrief.innerHTML = html || "";
   }
 
   /***********************
-   * SOUND FX
+   * SOUND FX (optional)
    ***********************/
   let audioCtx = null;
 
@@ -212,7 +211,7 @@
     return audioCtx;
   }
 
-  function beep({ freq = 880, dur = 0.08, type = "sine", gain = 0.12 } = {}) {
+  function beep({ freq = 880, dur = 0.07, type = "triangle", gain = 0.08 } = {}) {
     const ctx = ensureAudio();
     if (!ctx) return;
     const o = ctx.createOscillator();
@@ -227,20 +226,16 @@
   }
 
   function radarPing() {
-    beep({ freq: 220, dur: 0.05, type: "triangle", gain: 0.10 });
-    setTimeout(() => beep({ freq: 440, dur: 0.06, type: "triangle", gain: 0.10 }), 70);
-    setTimeout(() => beep({ freq: 880, dur: 0.07, type: "triangle", gain: 0.10 }), 150);
-  }
-
-  function coinClink(i = 0) {
-    const base = 520 + i * 35;
-    beep({ freq: base, dur: 0.05, type: "square", gain: 0.05 });
-    setTimeout(() => beep({ freq: base * 1.5, dur: 0.04, type: "square", gain: 0.04 }), 35);
+    beep({ freq: 220, dur: 0.05 });
+    setTimeout(() => beep({ freq: 440, dur: 0.06 }), 70);
+    setTimeout(() => beep({ freq: 880, dur: 0.07 }), 150);
   }
 
   function coinBeat(count) {
     const n = clampInt(count, 1, 24);
-    for (let i = 0; i < n; i++) setTimeout(() => coinClink(i), i * 110);
+    for (let i = 0; i < n; i++) {
+      setTimeout(() => beep({ freq: 520 + i * 35, dur: 0.05, type: "square", gain: 0.05 }), i * 110);
+    }
   }
 
   /***********************
@@ -276,13 +271,10 @@
       const btnX = document.createElement("button");
       btnX.className = "btn ghost";
       btnX.textContent = "×";
-      btnX.style.padding = "10px 0";
       btnX.addEventListener("click", () => {
         if (rows.length <= 2) return;
         rows.splice(idx, 1);
         renderRecipients();
-        updateTotals();
-        updateActionGuards();
       });
 
       wrap.appendChild(inpA);
@@ -296,7 +288,11 @@
   }
 
   function normalizeShares() {
-    const nums = rows.map((r) => Number(r.share || 0)).map((n) => (Number.isFinite(n) ? n : 0));
+    setError("");
+    const nums = rows
+      .map((r) => Number(r.share || 0))
+      .map((n) => (Number.isFinite(n) ? n : 0));
+
     const sum = nums.reduce((a, b) => a + b, 0);
     if (sum <= 0) return setError("Allocation Vector must be > 0.");
 
@@ -306,11 +302,12 @@
 
     rows = rows.map((r, i) => ({ ...r, share: String(Math.max(1, scaled[i])) }));
     renderRecipients();
-    setError("");
   }
 
   function updateTotals() {
-    const nums = rows.map((r) => Number(r.share || 0)).map((n) => (Number.isFinite(n) ? n : 0));
+    const nums = rows
+      .map((r) => Number(r.share || 0))
+      .map((n) => (Number.isFinite(n) ? n : 0));
     const sum = nums.reduce((a, b) => a + b, 0);
     el.totalPill.textContent = `VECTOR: ${sum || 0}`;
   }
@@ -324,10 +321,11 @@
       const s = (rows[i].share || "").trim();
 
       if (!isAddr(a)) return { ok: false, msg: `Target #${i + 1} address invalid.` };
+
       const n = Number(s);
       if (!Number.isFinite(n) || n <= 0) return { ok: false, msg: `Target #${i + 1} vector must be > 0.` };
 
-      accounts.push(ethers.utils.getAddress(a)); // checksum normalize
+      accounts.push(checksum(a));
       shares.push(toBN(Math.floor(n)));
     }
 
@@ -340,11 +338,11 @@
   }
 
   /***********************
-   * CHAIN + WALLET
+   * WALLET / CHAIN
    ***********************/
   async function ensureProvider() {
     if (!window.ethereum) {
-      setError("MetaMask not detected. Install MetaMask extension, then refresh.");
+      setError("No wallet detected. Install MetaMask and refresh.");
       throw new Error("No ethereum provider");
     }
     provider = new ethers.providers.Web3Provider(window.ethereum, "any");
@@ -355,6 +353,20 @@
     if (![56, 1, 137].includes(chainId)) {
       throw new Error("Unsupported network. Switch to BNB Chain, Ethereum, or Polygon.");
     }
+  }
+
+  async function syncChainFromWallet() {
+    const net = await provider.getNetwork();
+    lockSupportedChainOrThrow(net.chainId);
+
+    if (net.chainId === 56) currentChainKey = "bsc";
+    else if (net.chainId === 1) currentChainKey = "eth";
+    else if (net.chainId === 137) currentChainKey = "polygon";
+
+    el.selChain.value = currentChainKey;
+    el.pillNet.textContent = `THEATER: ${activeCfg().chainName} (chainId ${net.chainId})`;
+
+    log(`NETWORK ✅ ${activeCfg().chainName} chainId=${net.chainId}`);
   }
 
   async function connectWallet() {
@@ -373,28 +385,20 @@
       el.btnConnect.disabled = true;
 
       radarPing();
-      setStatus(`NODE LINKED: ${userAddress}`);
+
+      // IMPORTANT: log line you asked for
+      log(`WALLET CONNECTED ✅ ${userAddress}`);
 
       await syncChainFromWallet();
       await initContracts();
       await refreshTelemetry();
       updateActionGuards();
+
+      setStatus("NODE LINKED ✅");
     } catch (e) {
       setError(e?.message || "Wallet connection failed.");
       throw e;
     }
-  }
-
-  async function syncChainFromWallet() {
-    const net = await provider.getNetwork();
-    lockSupportedChainOrThrow(net.chainId);
-
-    if (net.chainId === 56) currentChainKey = "bsc";
-    else if (net.chainId === 1) currentChainKey = "eth";
-    else if (net.chainId === 137) currentChainKey = "polygon";
-
-    el.selChain.value = currentChainKey;
-    el.pillNet.textContent = `THEATER: ${activeCfg().chainName} (chainId ${net.chainId})`;
   }
 
   async function switchNetwork() {
@@ -419,15 +423,13 @@
         try {
           await window.ethereum.request({
             method: "wallet_addEthereumChain",
-            params: [
-              {
-                chainId: cfg.chainIdHex,
-                chainName: cfg.chainName,
-                nativeCurrency: { name: cfg.nativeSymbol, symbol: cfg.nativeSymbol, decimals: 18 },
-                rpcUrls: cfg.rpcUrls,
-                blockExplorerUrls: [cfg.explorer],
-              },
-            ],
+            params: [{
+              chainId: cfg.chainIdHex,
+              chainName: cfg.chainName,
+              nativeCurrency: { name: cfg.nativeSymbol, symbol: cfg.nativeSymbol, decimals: 18 },
+              rpcUrls: cfg.rpcUrls,
+              blockExplorerUrls: [cfg.explorer],
+            }],
           });
           currentChainKey = key;
           await initContracts();
@@ -445,37 +447,28 @@
   }
 
   async function initContracts() {
-    if (!provider) return;
-
     const cfg = activeCfg();
-    splitter = new ethers.Contract(cfg.splitter, SPLITTER_ABI, signer || provider);
 
+    splitter = new ethers.Contract(cfg.splitter, SPLITTER_ABI, signer || provider);
     el.teleSplitter.textContent = cfg.splitter;
 
-    try {
-      feeBps = Number(await splitter.feeBps());
-    } catch {
-      feeBps = 100;
-    }
-
-    try {
-      feeWallet = await splitter.feeWallet();
-    } catch {
-      feeWallet = null;
-    }
+    try { feeBps = Number(await splitter.feeBps()); } catch { feeBps = 100; }
+    try { feeWallet = await splitter.feeWallet(); } catch { feeWallet = null; }
 
     const feePct = (feeBps / 100).toFixed(2).replace(/\.00$/, "");
     document.querySelectorAll(".feeTiny").forEach((n) => (n.textContent = `${feePct}%`));
     el.teleFee.textContent = `${feePct}% → ${feeWallet ? shortAddr(feeWallet) : "feeWallet"}`;
 
+    log(`SPLITTER READY ✅ ${cfg.splitter}`);
     setStatus(`SPLITTER ONLINE. feeBps=${feeBps}`);
   }
 
   /***********************
-   * TOKEN LOAD + TELEMETRY
+   * TOKEN + TELEMETRY
    ***********************/
   async function loadToken(address) {
     setError("");
+
     if (!isAddr(address)) {
       token = null;
       tokenAddr = null;
@@ -489,8 +482,12 @@
       return;
     }
 
-    tokenAddr = ethers.utils.getAddress(address);
-    token = new ethers.Contract(tokenAddr, ERC20_ABI, signer || provider);
+    tokenAddr = checksum(address);
+
+    // IMPORTANT HARDENING:
+    // Always connect token contract to signer if available so approve NEVER "silently fails".
+    const base = new ethers.Contract(tokenAddr, ERC20_ABI, signer || provider);
+    token = signer ? base.connect(signer) : base;
 
     try { tokenSymbol = await token.symbol(); } catch { tokenSymbol = "TOKEN"; }
     try { tokenDecimals = Number(await token.decimals()); } catch { tokenDecimals = 18; }
@@ -498,7 +495,8 @@
     el.teleSymbol.textContent = tokenSymbol;
     el.teleDecimals.textContent = String(tokenDecimals);
 
-    setStatus(`ASSET LOADED: ${tokenSymbol} (decimals ${tokenDecimals})`);
+    log(`TOKEN LOADED ✅ ${tokenSymbol} decimals=${tokenDecimals}`);
+    setStatus(`ASSET LOADED: ${tokenSymbol}`);
     updateActionGuards();
   }
 
@@ -548,24 +546,33 @@
 
     if (!raw || !Number.isFinite(num) || num <= 0) {
       el.usdEst.textContent = "—";
-      el.postFeeLine.textContent = mode === "token" ? "Post-fee delivery —" : "Native delivery —";
+      el.postFeeLine.textContent = "Post-fee delivery —";
       return;
     }
 
     const afterFee = num * (1 - feeBps / 10000);
-
-    // USD is only an estimate label; do not pretend it is live pricing
     el.usdEst.textContent = `~$${num.toFixed(2)}`;
 
     if (mode === "token") {
-      el.postFeeLine.textContent = `Post-fee delivery ~ ${afterFee.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")} ${tokenSymbol}`;
+      el.postFeeLine.textContent =
+        `Post-fee delivery ~ ${afterFee.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")} ${tokenSymbol}`;
     } else {
-      el.postFeeLine.textContent = `Native delivery on ${cfgNativeSymbol()} (multi-tx mode)`;
+      el.postFeeLine.textContent = "Native distribution: coming soon.";
     }
   }
 
   /***********************
-   * MODE + ACTION GUARDS
+   * OPERATOR CONSOLE
+   ***********************/
+  function setOperatorMode(on) {
+    operatorMode = !!on;
+    el.btnToggleOps.textContent = operatorMode ? "OPERATOR: ON" : "OPERATOR: OFF";
+    el.opsHint.style.display = operatorMode ? "block" : "none";
+    log(operatorMode ? "Operator console enabled." : "Operator console disabled.");
+  }
+
+  /***********************
+   * MODE + GUARDS
    ***********************/
   function applyMode() {
     const mode = el.selMode.value;
@@ -575,13 +582,13 @@
       el.modeHint.textContent = "Token mode: ARM CONTRACT → DEPLOY PAYLOAD. Fee is applied inside the splitter.";
       el.gasHint.textContent = "Token mode uses exact token amount.";
       el.btnApprove.style.display = "inline-block";
-      el.btnMax.disabled = true; // max is native only
+      el.btnExecute.style.display = "inline-block";
     } else {
+      // Keep it selectable, but clearly disable actions (native contract not deployed yet)
       el.tokenBlock.style.display = "none";
-      el.modeHint.textContent = "Native distribution requires a native splitter contract for 1-tx split. Current build can do multi-tx sends.";
-      el.gasHint.textContent = "MAX reserves gas automatically for native coin.";
+      el.modeHint.textContent = "Native distribution is coming later (requires a native splitter contract).";
+      el.gasHint.textContent = "Native mode is disabled in this build.";
       el.btnApprove.style.display = "none";
-      el.btnMax.disabled = false;
     }
 
     updateEstimate();
@@ -589,11 +596,10 @@
   }
 
   function updateActionGuards() {
-    // Lock action buttons unless safe
+    const connected = !!userAddress && !!signer;
     const mode = el.selMode.value;
 
-    const connected = !!userAddress && !!signer;
-    el.btnSwitch.disabled = !provider;
+    // Always allow editing recipients
     el.btnAdd.disabled = false;
     el.btnNormalize.disabled = rows.length < 2;
 
@@ -603,14 +609,11 @@
       return;
     }
 
-    if (mode === "native") {
-      // no native 1-tx contract exists in this build
+    if (mode !== "token") {
       el.btnExecute.disabled = true;
-      el.btnApprove.disabled = true;
       return;
     }
 
-    // token mode
     const tokenOk = isAddr((el.inpToken.value || "").trim());
     const amtOk = Number(el.inpAmount.value || 0) > 0;
     const recOk = validateRecipients().ok;
@@ -620,36 +623,51 @@
   }
 
   /***********************
-   * MAX (native gas-safe)
+   * MODAL
    ***********************/
-  async function setMaxGasSafe() {
-    setError("");
-    if (!provider || !userAddress) return setError("LINK NODE first.");
+  function openModal(html) {
+    el.modalBody.innerHTML = html;
+    el.chkAcknowledge.checked = false;
+    el.modal.style.display = "block";
+  }
+  function closeModal() {
+    el.modal.style.display = "none";
+  }
 
-    const mode = el.selMode.value;
-    if (mode !== "native") return;
-
+  function buildModalSummary({ taddr, amt, accounts, shares }) {
     const cfg = activeCfg();
+    const feePct = (feeBps / 100).toFixed(2).replace(/\.00$/, "");
+    const afterFee = Number(amt) * (1 - feeBps / 10000);
 
-    try {
-      const bal = await provider.getBalance(userAddress);
-      const reserve = ethers.utils.parseEther(currentChainKey === "eth" ? "0.005" : "0.003");
-      const spendable = bal.gt(reserve) ? bal.sub(reserve) : ethers.BigNumber.from(0);
-      el.inpAmount.value = ethers.utils.formatEther(spendable);
-      setStatus(`MAX SET (gas-safe). Reserved ${ethers.utils.formatEther(reserve)} ${cfg.nativeSymbol}`);
-      updateEstimate();
-    } catch (e) {
-      setError(e?.message || "Failed to compute MAX.");
-    }
+    const wSum = shares.reduce((a, b) => a + Number(b.toString()), 0);
+
+    const lines = accounts.map((a, i) => {
+      const w = Number(shares[i].toString());
+      const est = wSum ? (afterFee * (w / wSum)) : 0;
+      return `• ${shortAddr(a)} ← ~${est.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")} ${tokenSymbol}`;
+    }).join("<br/>");
+
+    return `
+<b>THEATER:</b> ${cfg.chainName}<br/>
+<b>ASSET:</b> ${tokenSymbol} <span style="opacity:.65;">(${shortAddr(taddr)})</span><br/>
+<b>PAYLOAD:</b> ${amt} ${tokenSymbol}<br/>
+<b>FEE:</b> ${feePct}% → ${feeWallet ? shortAddr(feeWallet) : "feeWallet"}<br/>
+<b>DELIVERY (post-fee):</b> ~${afterFee.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")} ${tokenSymbol}<br/>
+<div class="hr"></div>
+<b>TARGET MATRIX:</b><br/>
+${lines}<br/>
+<div class="hr"></div>
+<span style="opacity:.75;">Funds deliver on <b>${cfg.chainName}</b>. Recipients must view the same chain.</span>
+`;
   }
 
   /***********************
-   * APPROVE + EXECUTE
+   * APPROVE (FIXED)
    ***********************/
   async function approveToken() {
     setError("");
-    if (!signer || !userAddress) return setError("LINK NODE first.");
 
+    if (!signer || !userAddress) return setError("LINK NODE first.");
     if (el.selMode.value !== "token") return setError("ARM CONTRACT is token-mode only.");
 
     const taddrRaw = (el.inpToken.value || "").trim();
@@ -669,66 +687,46 @@
 
     try {
       el.btnApprove.disabled = true;
+
+      // Preflight: read current allowance
+      const currentAllow = await token.allowance(userAddress, cfg.splitter);
+      if (operatorMode) log(`Preflight allowance: ${ethers.utils.formatUnits(currentAllow, tokenDecimals)} ${tokenSymbol}`);
+
       setStatus(`ARMING ${tokenSymbol}…`);
 
+      // If already enough, skip sending tx
+      if (currentAllow.gte(amountWei)) {
+        log(`Allowance already sufficient ✅`);
+        setStatus("ARMED ✅ (already sufficient)");
+        await refreshTelemetry();
+        return;
+      }
+
+      // IMPORTANT: approve must be a signer-connected contract (we enforce in loadToken)
       const tx = await token.approve(cfg.splitter, amountWei);
       log(`ARM tx: ${tx.hash}`);
+      setStatus("AWAITING CONFIRMATION…");
       await tx.wait();
 
       setStatus("ARMED ✅");
       await refreshTelemetry();
     } catch (e) {
-      setError(e?.data?.message || e?.message || "ARM failed.");
+      const msg = e?.error?.message || e?.data?.message || e?.message || "ARM failed.";
+      setError(msg);
     } finally {
       el.btnApprove.disabled = false;
       updateActionGuards();
     }
   }
 
-  // Build confirmation modal content
-  function buildModalSummary({ taddr, amt, accounts, shares }) {
-    const cfg = activeCfg();
-    const feePct = (feeBps / 100).toFixed(2).replace(/\.00$/, "");
-    const afterFee = Number(amt) * (1 - feeBps / 10000);
-
-    // naive estimated per-recipient split based on weights
-    const wSum = shares.reduce((a, b) => a + Number(b.toString()), 0);
-    const lines = accounts.map((a, i) => {
-      const w = Number(shares[i].toString());
-      const est = wSum ? (afterFee * (w / wSum)) : 0;
-      return `• ${shortAddr(a)} ← ~${est.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")} ${tokenSymbol}`;
-    }).join("<br/>");
-
-    return `
-<b>THEATER:</b> ${cfg.chainName}<br/>
-<b>ASSET:</b> ${tokenSymbol} <span style="opacity:.65;">(${shortAddr(taddr)})</span><br/>
-<b>PAYLOAD:</b> ${amt} ${tokenSymbol}<br/>
-<b>FEE:</b> ${feePct}% → ${feeWallet ? shortAddr(feeWallet) : "feeWallet"}<br/>
-<b>DELIVERY (post-fee):</b> ~${afterFee.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")} ${tokenSymbol}<br/>
-<div class="hr"></div>
-<b>TARGET MATRIX:</b><br/>
-${lines}<br/>
-<div class="hr"></div>
-<span style="opacity:.75;">Funds deliver on <b>${cfg.chainName}</b>. Recipients must view the same chain in their wallet.</span>
-`;
-  }
-
-  function openModal(html) {
-    el.modalBody.innerHTML = html;
-    el.chkAcknowledge.checked = false;
-    el.modal.style.display = "block";
-  }
-  function closeModal() {
-    el.modal.style.display = "none";
-  }
-
+  /***********************
+   * EXECUTE
+   ***********************/
   async function executeSplit() {
     setError("");
-    if (!signer || !userAddress) return setError("LINK NODE first.");
 
-    if (el.selMode.value !== "token") {
-      return setError("Native multi-tx mode is not enabled in this build. Token distribution is online.");
-    }
+    if (!signer || !userAddress) return setError("LINK NODE first.");
+    if (el.selMode.value !== "token") return setError("Native distribution is coming later.");
 
     const cfg = activeCfg();
     const taddrRaw = (el.inpToken.value || "").trim();
@@ -743,8 +741,9 @@ ${lines}<br/>
     const vr = validateRecipients();
     if (!vr.ok) return setError(vr.msg);
 
-    // allow-check preflight
     const amountWei = ethers.utils.parseUnits(amt, tokenDecimals);
+
+    // Allowance preflight
     try {
       const allow = await token.allowance(userAddress, cfg.splitter);
       if (allow.lt(amountWei)) return setError(`Allowance too low. ARM at least ${amt} ${tokenSymbol} first.`);
@@ -752,10 +751,14 @@ ${lines}<br/>
       // ignore
     }
 
-    // show confirm modal first
-    openModal(buildModalSummary({ taddr: ethers.utils.getAddress(taddrRaw), amt, accounts: vr.accounts, shares: vr.shares }));
+    // Confirm modal
+    openModal(buildModalSummary({
+      taddr: checksum(taddrRaw),
+      amt,
+      accounts: vr.accounts,
+      shares: vr.shares,
+    }));
 
-    // defer actual tx to modal confirm handler
     el.btnModalConfirm.onclick = async () => {
       if (!el.chkAcknowledge.checked) return setError("Acknowledge chain-locked delivery to proceed.");
       setError("");
@@ -763,20 +766,20 @@ ${lines}<br/>
 
       try {
         el.btnExecute.disabled = true;
-        setStatus("DEPLOYING…");
 
         coinBeat(vr.accounts.length);
+        setStatus("DEPLOYING…");
 
-        // STATIC preflight: catches reverts before spending gas
+        if (operatorMode) log("Static preflight call…");
         await splitter.callStatic.depositAndDistribute(
-          ethers.utils.getAddress(taddrRaw),
+          checksum(taddrRaw),
           vr.accounts,
           vr.shares,
           amountWei
         );
 
         const tx = await splitter.depositAndDistribute(
-          ethers.utils.getAddress(taddrRaw),
+          checksum(taddrRaw),
           vr.accounts,
           vr.shares,
           amountWei
@@ -788,32 +791,21 @@ ${lines}<br/>
         log(`DEPLOY tx: ${tx.hash}`);
         setStatus("AWAITING CONFIRMATION…");
 
-        const receipt = await tx.wait();
-        setStatus("DEPLOYMENT SUCCESS ✅");
+        await tx.wait();
 
-        // Build "Token Transfers" deep link (explorers differ, but tx link is universal)
-        const transfersHint = `
-<b>TX:</b> <a href="${lastExplorerLink}" target="_blank" rel="noreferrer">View on Explorer</a><br/>
-<span style="opacity:.75;">On BSC/Polygon, view <b>Token Transfers</b> tab to see recipient payouts.</span>
-`;
+        setStatus("DEPLOYMENT SUCCESS ✅");
 
         setDebrief(
           `<b>DEPLOYMENT SUCCESSFUL</b><br/>
            <span style="opacity:.75;">THEATER:</span> ${cfg.chainName}<br/>
            <span style="opacity:.75;">ASSET:</span> ${tokenSymbol} <span style="opacity:.6;">(${shortAddr(tokenAddr)})</span><br/>
-           <span style="opacity:.75;">FEE:</span> ${(feeBps/100).toFixed(2).replace(/\.00$/,"")}% → ${feeWallet ? shortAddr(feeWallet) : "feeWallet"}<br/>
-           <div class="hr"></div>
-           ${transfersHint}`
+           <span style="opacity:.75;">TX:</span> <a href="${lastExplorerLink}" target="_blank" rel="noreferrer">View on Explorer</a><br/>
+           <span style="opacity:.75;">Tip:</span> Recipients must view <b>${cfg.chainName}</b> network to see the token.`
         );
 
         await refreshTelemetry();
       } catch (e) {
-        const msg =
-          e?.error?.message ||
-          e?.data?.message ||
-          e?.reason ||
-          e?.message ||
-          "DEPLOY failed.";
+        const msg = e?.error?.message || e?.data?.message || e?.reason || e?.message || "DEPLOY failed.";
         setError(msg);
       } finally {
         el.btnExecute.disabled = false;
@@ -823,7 +815,7 @@ ${lines}<br/>
   }
 
   /***********************
-   * Add token to wallet (MetaMask)
+   * Add token to wallet + View tx
    ***********************/
   async function addTokenToWallet() {
     setError("");
@@ -858,8 +850,10 @@ ${lines}<br/>
    * EVENTS
    ***********************/
   function bindEvents() {
-    el.btnConnect.addEventListener("click", () => connectWallet());
-    el.btnSwitch.addEventListener("click", () => switchNetwork());
+    el.btnConnect.addEventListener("click", connectWallet);
+    el.btnSwitch.addEventListener("click", switchNetwork);
+
+    el.btnToggleOps.addEventListener("click", () => setOperatorMode(!operatorMode));
 
     el.selChain.addEventListener("change", () => {
       if (provider) switchNetwork();
@@ -878,21 +872,20 @@ ${lines}<br/>
       updateActionGuards();
     });
 
-    el.btnMax.addEventListener("click", () => setMaxGasSafe());
-    el.btnNormalize.addEventListener("click", () => normalizeShares());
+    el.btnNormalize.addEventListener("click", normalizeShares);
 
     el.btnAdd.addEventListener("click", () => {
       rows.push({ account: "", share: "10" });
       renderRecipients();
     });
 
-    el.btnApprove.addEventListener("click", () => approveToken());
-    el.btnExecute.addEventListener("click", () => executeSplit());
+    el.btnApprove.addEventListener("click", approveToken);
+    el.btnExecute.addEventListener("click", executeSplit);
 
-    el.btnAddToken.addEventListener("click", () => addTokenToWallet());
-    el.btnViewTx.addEventListener("click", () => viewLastTx());
+    el.btnAddToken.addEventListener("click", addTokenToWallet);
+    el.btnViewTx.addEventListener("click", viewLastTx);
 
-    el.btnRefresh.addEventListener("click", () => refreshTelemetry());
+    el.btnRefresh.addEventListener("click", refreshTelemetry);
     el.btnClear.addEventListener("click", () => {
       el.log.textContent = "";
       setError("");
@@ -900,9 +893,8 @@ ${lines}<br/>
       setStatus("Log cleared.");
     });
 
-    // modal close/back
-    el.btnModalClose.addEventListener("click", () => closeModal());
-    el.btnModalBack.addEventListener("click", () => closeModal());
+    el.btnModalClose.addEventListener("click", closeModal);
+    el.btnModalBack.addEventListener("click", closeModal);
     el.modal.addEventListener("click", (e) => {
       if (e.target === el.modal) closeModal();
     });
@@ -913,19 +905,28 @@ ${lines}<br/>
         if (!accs || !accs.length) {
           userAddress = null;
           signer = null;
+
           el.pillWallet.textContent = "NODE: DISCONNECTED";
           el.btnConnect.textContent = "LINK NODE";
           el.btnConnect.classList.remove("connected");
           el.btnConnect.classList.add("gold");
           el.btnConnect.disabled = false;
+
+          token = null; tokenAddr = null;
+
           setDebrief("");
+          log("WALLET DISCONNECTED.");
           setStatus("NODE DISCONNECTED.");
           updateActionGuards();
           return;
         }
+
         userAddress = accs[0];
         el.pillWallet.textContent = `NODE: ${shortAddr(userAddress)}`;
-        setStatus(`NODE CHANGED: ${userAddress}`);
+
+        // IMPORTANT: log line
+        log(`WALLET CHANGED ✅ ${userAddress}`);
+
         await refreshTelemetry();
       });
 
@@ -936,7 +937,7 @@ ${lines}<br/>
           await syncChainFromWallet();
           await initContracts();
           await refreshTelemetry();
-          setStatus("THEATER CHANGED.");
+          setStatus("THEATER CHANGED ✅");
         } catch (e) {
           setError(e?.message || "Chain change error.");
         }
@@ -951,19 +952,20 @@ ${lines}<br/>
     try {
       renderRecipients();
       applyMode();
+      setOperatorMode(false); // default simple mode
 
-      currentChainKey = el.selChain.value || "bsc";
       el.pillNet.textContent = `THEATER: ${activeCfg().chainName}`;
       el.teleSplitter.textContent = activeCfg().splitter;
-      el.teleFee.textContent = "—";
 
       bindEvents();
+
       setStatus("CITADEL ONLINE. LINK NODE to begin.");
 
-      // silent connect if already authorized
+      // Silent connect if already authorized
       if (window.ethereum) {
         await ensureProvider();
         const accs = await window.ethereum.request({ method: "eth_accounts" });
+
         if (accs && accs.length) {
           signer = provider.getSigner();
           userAddress = accs[0];
@@ -974,9 +976,13 @@ ${lines}<br/>
           el.btnConnect.classList.add("connected");
           el.btnConnect.disabled = true;
 
+          // IMPORTANT: log line you asked for
+          log(`AUTO-LINKED ✅ ${userAddress}`);
+
           await syncChainFromWallet();
           await initContracts();
           await refreshTelemetry();
+
           setStatus("AUTO-LINKED ✅");
         }
       }
