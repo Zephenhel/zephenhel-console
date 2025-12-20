@@ -1,11 +1,10 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>ZEPHENHEL CITADEL</title>
-
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./styles.css"/>
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 </head>
 <body>
@@ -14,15 +13,16 @@
   <div class="topbar-inner">
     <div class="brand">
       <div class="brand-badge">Z</div>
-      <div>
+      <div class="brand-text">
         <h1>ZEPHENHEL CITADEL</h1>
-        <p>Tri-chain token splitter • BSC • Ethereum • Polygon</p>
+        <p>Tri-chain Split Console • BSC • Ethereum • Polygon</p>
       </div>
     </div>
 
     <div class="pills">
-      <div class="pill" id="pillNet">Network: —</div>
-      <div class="pill" id="pillWallet">Wallet: Disconnected</div>
+      <div class="pill net" id="pillNet">Network: —</div>
+      <div class="pill wallet" id="pillWallet">Wallet: Disconnected</div>
+
       <button class="btn ghost" id="btnSwitch" type="button">Switch</button>
       <button class="btn gold" id="btnConnect" type="button">Connect</button>
     </div>
@@ -34,69 +34,117 @@
 
     <!-- LEFT -->
     <section class="card">
-      <h2>Split Command</h2>
-
-      <label>Chain</label>
-      <select id="selChain">
-        <option value="bsc">BSC Mainnet</option>
-        <option value="eth">Ethereum</option>
-        <option value="polygon">Polygon</option>
-      </select>
-
-      <hr>
-
-      <label>Token address (ERC20 / BEP20)</label>
-      <input id="inpToken" placeholder="0x…" spellcheck="false" />
-
-      <label>Amount</label>
-      <input id="inpAmount" placeholder="1.0" inputmode="decimal" />
-
-      <div class="notice">
-        Platform fee is handled by the splitter contract.
+      <div class="card-title">
+        <h2>Split Command</h2>
+        <span class="tag">ZephFlexSplitter</span>
       </div>
 
-      <hr>
+      <div class="label">Chain</div>
+      <select id="selChain">
+        <option value="bsc">BSC Mainnet</option>
+        <option value="eth">Ethereum Mainnet</option>
+        <option value="polygon">Polygon Mainnet</option>
+      </select>
 
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-        <h3 style="margin:0;">Recipients</h3>
-        <div style="display:flex; gap:8px; align-items:center;">
-          <span id="totalPill">Total: 0</span>
+      <div class="hr"></div>
+
+      <div class="label">Token address (ERC20 / BEP20)</div>
+      <input id="inpToken" placeholder="0x…" spellcheck="false"/>
+
+      <div class="row2">
+        <div>
+          <div class="label">Amount</div>
+          <input id="inpAmount" placeholder="1.0" inputmode="decimal"/>
+          <div class="small">Approve → Execute. Fee is handled inside your splitter contract.</div>
+        </div>
+
+        <div class="miniCard">
+          <div class="miniTitle">Active Spender</div>
+          <div class="miniValue mono" id="spendAddr">—</div>
+          <div class="miniSub">This must match your chain’s splitter.</div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="card-title">
+        <h2>Recipients</h2>
+        <div class="inlineBtns">
+          <span class="pill" id="totalPill">Total: 0</span>
           <button class="btn ghost" id="btnNormalize" type="button">Normalize</button>
           <button class="btn ghost" id="btnAdd" type="button">+ Add</button>
         </div>
       </div>
 
-      <div id="recipients" style="margin-top:10px;"></div>
+      <div id="recipients"></div>
 
-      <div class="row-actions" style="margin-top:12px; display:flex; gap:10px;">
+      <div class="btnRow">
         <button class="btn ghost" id="btnApprove" type="button">Approve</button>
         <button class="btn gold" id="btnExecute" type="button">Execute Split</button>
       </div>
 
-      <div class="error" id="errBox" style="display:none; margin-top:12px;"></div>
-      <p class="footer-note">Always test small amounts first.</p>
+      <div class="notice">
+        Tip: If a token refuses approve, try “Approve” again (some require reset-to-0 first, we handle that automatically).
+      </div>
+
+      <div class="error" id="errBox" style="display:none;"></div>
+      <div class="footer-note">Public launch build • Test small first</div>
     </section>
 
     <!-- RIGHT -->
     <section class="card">
-      <h2>Live Telemetry</h2>
-
-      <div class="tele">
-        <div>Native balance: <span id="teleNative">—</span></div>
-        <div>Token symbol: <span id="teleSymbol">—</span></div>
-        <div>Decimals: <span id="teleDecimals">—</span></div>
-        <div>Token balance: <span id="teleTokenBal">—</span></div>
-        <div>Allowance → splitter: <span id="teleAllowance">—</span></div>
-        <div>Active splitter: <span id="teleSplitter">—</span></div>
-        <div>Status: <span id="teleStatus">Ready</span></div>
+      <div class="card-title">
+        <h2>Telemetry</h2>
+        <span class="tag">Live</span>
       </div>
 
-      <div style="display:flex; gap:10px; margin-top:12px;">
-        <button class="btn ghost" id="btnRefresh" type="button">Refresh</button>
-        <button class="btn ghost" id="btnClear" type="button">Clear Log</button>
+      <div class="teleGrid">
+        <div class="teleBox">
+          <div class="teleK">Native balance</div>
+          <div class="teleV" id="teleNative">—</div>
+        </div>
+
+        <div class="teleBox">
+          <div class="teleK">Token</div>
+          <div class="teleV" id="teleSymbol">—</div>
+        </div>
+
+        <div class="teleBox">
+          <div class="teleK">Decimals</div>
+          <div class="teleV" id="teleDecimals">—</div>
+        </div>
+
+        <div class="teleBox">
+          <div class="teleK">Token balance</div>
+          <div class="teleV" id="teleTokenBal">—</div>
+        </div>
+
+        <div class="teleBox">
+          <div class="teleK">Allowance → splitter</div>
+          <div class="teleV" id="teleAllowance">—</div>
+        </div>
+
+        <div class="teleBox">
+          <div class="teleK">Active splitter</div>
+          <div class="teleV mono" id="teleSplitter">—</div>
+        </div>
+
+        <div class="teleBox" style="grid-column:1 / -1;">
+          <div class="teleK">Status</div>
+          <div class="teleV" id="teleStatus">Booting…</div>
+        </div>
       </div>
 
-      <h3 style="margin-top:12px;">Runtime Log</h3>
+      <div class="hr"></div>
+
+      <div class="card-title">
+        <h2>Runtime Log</h2>
+        <div class="inlineBtns">
+          <button class="btn ghost" id="btnRefresh" type="button">Refresh</button>
+          <button class="btn ghost" id="btnClear" type="button">Clear</button>
+        </div>
+      </div>
+
       <pre class="log" id="log"></pre>
     </section>
 
