@@ -23,6 +23,10 @@
     <div class="pills">
       <div class="pill" id="pillNet">Network: —</div>
       <div class="pill" id="pillWallet">Wallet: Disconnected</div>
+
+      <!-- Operator console toggle (default OFF) -->
+      <button class="btn ghost" id="btnOps">Operator Console: OFF</button>
+
       <button class="btn ghost" id="btnSwitch">Switch</button>
       <button class="btn gold" id="btnConnect">Connect</button>
     </div>
@@ -30,7 +34,7 @@
 </header>
 
 <main class="container">
-  <div class="grid">
+  <div class="grid" id="mainGrid">
 
     <!-- LEFT -->
     <section class="card">
@@ -51,8 +55,8 @@
       <label>Amount</label>
       <input id="inpAmount" placeholder="1.0" inputmode="decimal" />
 
-      <div class="notice">
-        Platform fee: <b>1%</b> (handled by contract)
+      <div class="notice" id="feeNotice">
+        Platform fee: <b><span id="feeLabel">1%</span></b> (handled by contract)
       </div>
 
       <hr>
@@ -61,7 +65,7 @@
       <div id="recipients"></div>
 
       <div class="row-actions">
-        <span id="totalPill">Total: 100</span>
+        <span id="totalPill">Total weight: 0</span>
         <button class="btn ghost" id="btnAdd">+ Add</button>
       </div>
 
@@ -74,8 +78,8 @@
       <p class="footer-note">Always test small amounts first.</p>
     </section>
 
-    <!-- RIGHT -->
-    <section class="card">
+    <!-- RIGHT (Operator Console Panel) -->
+    <section class="card" id="opsPanel" style="display:none;">
       <h2>Live Telemetry</h2>
 
       <div class="tele">
@@ -85,11 +89,20 @@
         <div>Token balance: <span id="teleTokenBal">—</span></div>
         <div>Allowance → splitter: <span id="teleAllowance">—</span></div>
         <div>Active splitter: <span id="teleSplitter">—</span></div>
+        <div>Fee (bps): <span id="teleFeeBps">—</span></div>
+        <div>Fee wallet: <span id="teleFeeWallet">—</span></div>
         <div>Status: <span id="teleStatus">Ready</span></div>
       </div>
 
       <h3>Runtime Log</h3>
       <pre class="log" id="log"></pre>
+
+      <div class="row-actions">
+        <button class="btn ghost" id="btnClearLog">Clear Log</button>
+        <button class="btn ghost" id="btnRefresh">Refresh</button>
+      </div>
+
+      <p class="footer-note">Operator console is for debugging + proof.</p>
     </section>
 
   </div>
