@@ -24,9 +24,7 @@
       <div class="pill" id="pillNet">Network: —</div>
       <div class="pill" id="pillWallet">Wallet: Disconnected</div>
 
-      <!-- Operator console toggle (default OFF) -->
       <button class="btn ghost" id="btnOps">Operator Console: OFF</button>
-
       <button class="btn ghost" id="btnSwitch">Switch</button>
       <button class="btn gold" id="btnConnect">Connect</button>
     </div>
@@ -57,6 +55,14 @@
 
       <div class="notice" id="feeNotice">
         Platform fee: <b><span id="feeLabel">1%</span></b> (handled by contract)
+      </div>
+
+      <!-- Approve mode -->
+      <div class="row-actions" style="margin-top:10px;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+          <input type="checkbox" id="chkApproveMax" />
+          <span>Approve Max (recommended for public users)</span>
+        </label>
       </div>
 
       <hr>
