@@ -3,153 +3,75 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>ZEPHENHEL CITADEL</title>
-  <link rel="stylesheet" href="./styles.css"/>
+  <title>Zeph Splitter</title>
+
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+
+  <style>
+    body {
+      background:#0b0b10;
+      color:#e8e8ea;
+      font-family: Arial, sans-serif;
+      padding:20px;
+    }
+    h1 { color:#f5c44d; }
+    input, button {
+      width:100%;
+      padding:10px;
+      margin:6px 0;
+      background:#121522;
+      border:1px solid #333;
+      color:#fff;
+      border-radius:6px;
+    }
+    button {
+      cursor:pointer;
+      background:#f5c44d;
+      color:#000;
+      font-weight:bold;
+    }
+    .row {
+      display:flex;
+      gap:6px;
+    }
+    .row input { flex:1; }
+    .log {
+      background:#07070a;
+      border:1px solid #333;
+      padding:10px;
+      height:200px;
+      overflow:auto;
+      white-space:pre-wrap;
+      font-size:12px;
+      margin-top:10px;
+    }
+  </style>
 </head>
+
 <body>
 
-<header class="topbar">
-  <div class="topbar-inner">
-    <div class="brand">
-      <div class="brand-badge">Z</div>
-      <div class="brand-text">
-        <h1>ZEPHENHEL CITADEL</h1>
-        <p>Tri-chain Split Console • BSC • Ethereum • Polygon</p>
-      </div>
-    </div>
+<h1>ZephFlex Splitter</h1>
 
-    <div class="pills">
-      <div class="pill net" id="pillNet">Network: —</div>
-      <div class="pill wallet" id="pillWallet">Wallet: Disconnected</div>
+<button id="connect">Connect Wallet</button>
 
-      <button class="btn ghost" id="btnSwitch" type="button">Switch</button>
-      <button class="btn gold" id="btnConnect" type="button">Connect</button>
-    </div>
-  </div>
-</header>
+<div><b>Connected:</b> <span id="wallet">—</span></div>
+<div><b>Network:</b> <span id="network">—</span></div>
 
-<main class="container">
-  <div class="grid">
+<hr>
 
-    <!-- LEFT -->
-    <section class="card">
-      <div class="card-title">
-        <h2>Split Command</h2>
-        <span class="tag">ZephFlexSplitter</span>
-      </div>
+<input id="token" placeholder="Token address (ERC20 / BEP20)" />
+<input id="amount" placeholder="Amount (example: 1.5)" />
 
-      <div class="label">Chain</div>
-      <select id="selChain">
-        <option value="bsc">BSC Mainnet</option>
-        <option value="eth">Ethereum Mainnet</option>
-        <option value="polygon">Polygon Mainnet</option>
-      </select>
+<h3>Recipients</h3>
+<div id="recipients"></div>
+<button id="add">Add recipient</button>
 
-      <div class="hr"></div>
+<hr>
 
-      <div class="label">Token address (ERC20 / BEP20)</div>
-      <input id="inpToken" placeholder="0x…" spellcheck="false"/>
+<button id="approve">Approve</button>
+<button id="execute">Execute Split</button>
 
-      <div class="row2">
-        <div>
-          <div class="label">Amount</div>
-          <input id="inpAmount" placeholder="1.0" inputmode="decimal"/>
-          <div class="small">Approve → Execute. Fee is handled inside your splitter contract.</div>
-        </div>
-
-        <div class="miniCard">
-          <div class="miniTitle">Active Spender</div>
-          <div class="miniValue mono" id="spendAddr">—</div>
-          <div class="miniSub">This must match your chain’s splitter.</div>
-        </div>
-      </div>
-
-      <div class="hr"></div>
-
-      <div class="card-title">
-        <h2>Recipients</h2>
-        <div class="inlineBtns">
-          <span class="pill" id="totalPill">Total: 0</span>
-          <button class="btn ghost" id="btnNormalize" type="button">Normalize</button>
-          <button class="btn ghost" id="btnAdd" type="button">+ Add</button>
-        </div>
-      </div>
-
-      <div id="recipients"></div>
-
-      <div class="btnRow">
-        <button class="btn ghost" id="btnApprove" type="button">Approve</button>
-        <button class="btn gold" id="btnExecute" type="button">Execute Split</button>
-      </div>
-
-      <div class="notice">
-        Tip: If a token refuses approve, try “Approve” again (some require reset-to-0 first, we handle that automatically).
-      </div>
-
-      <div class="error" id="errBox" style="display:none;"></div>
-      <div class="footer-note">Public launch build • Test small first</div>
-    </section>
-
-    <!-- RIGHT -->
-    <section class="card">
-      <div class="card-title">
-        <h2>Telemetry</h2>
-        <span class="tag">Live</span>
-      </div>
-
-      <div class="teleGrid">
-        <div class="teleBox">
-          <div class="teleK">Native balance</div>
-          <div class="teleV" id="teleNative">—</div>
-        </div>
-
-        <div class="teleBox">
-          <div class="teleK">Token</div>
-          <div class="teleV" id="teleSymbol">—</div>
-        </div>
-
-        <div class="teleBox">
-          <div class="teleK">Decimals</div>
-          <div class="teleV" id="teleDecimals">—</div>
-        </div>
-
-        <div class="teleBox">
-          <div class="teleK">Token balance</div>
-          <div class="teleV" id="teleTokenBal">—</div>
-        </div>
-
-        <div class="teleBox">
-          <div class="teleK">Allowance → splitter</div>
-          <div class="teleV" id="teleAllowance">—</div>
-        </div>
-
-        <div class="teleBox">
-          <div class="teleK">Active splitter</div>
-          <div class="teleV mono" id="teleSplitter">—</div>
-        </div>
-
-        <div class="teleBox" style="grid-column:1 / -1;">
-          <div class="teleK">Status</div>
-          <div class="teleV" id="teleStatus">Booting…</div>
-        </div>
-      </div>
-
-      <div class="hr"></div>
-
-      <div class="card-title">
-        <h2>Runtime Log</h2>
-        <div class="inlineBtns">
-          <button class="btn ghost" id="btnRefresh" type="button">Refresh</button>
-          <button class="btn ghost" id="btnClear" type="button">Clear</button>
-        </div>
-      </div>
-
-      <pre class="log" id="log"></pre>
-    </section>
-
-  </div>
-</main>
+<div class="log" id="log"></div>
 
 <script src="./app.js"></script>
 </body>
