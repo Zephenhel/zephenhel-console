@@ -2,9 +2,6 @@
 (() => {
   "use strict";
 
-  /***********************
-   * CONFIG (YOUR ADDRESSES)
-   ***********************/
   const CONTRACTS = {
     bsc: {
       chainId: 56,
@@ -29,9 +26,6 @@
     },
   };
 
-  /***********************
-   * ABIs (MINIMAL)
-   ***********************/
   const SPLITTER_ABI = [
     "function feeBps() view returns (uint16)",
     "function feeWallet() view returns (address)",
@@ -46,9 +40,6 @@
     "function approve(address spender, uint256 amount) returns (bool)",
   ];
 
-  /***********************
-   * DOM
-   ***********************/
   const $ = (id) => document.getElementById(id);
 
   const el = {
@@ -62,6 +53,8 @@
     selChain: $("selChain"),
     inpToken: $("inpToken"),
     inpAmount: $("inpAmount"),
+
+    chkApproveMax: $("chkApproveMax"),
 
     recipients: $("recipients"),
     totalPill: $("totalPill"),
@@ -88,29 +81,18 @@
     btnRefresh: $("btnRefresh"),
   };
 
-  // Hard fail if required DOM missing (prevents "null.value" crashes)
-  const REQUIRED = [
-    "pillNet","pillWallet","btnSwitch","btnConnect","btnOps","opsPanel",
-    "selChain","inpToken","inpAmount",
-    "recipients","totalPill","btnAdd","btnApprove","btnExecute",
-    "errBox","feeLabel",
-    "teleNative","teleSymbol","teleDecimals","teleTokenBal","teleAllowance","teleSplitter","teleFeeBps","teleFeeWallet","teleStatus",
-    "log","btnClearLog","btnRefresh"
-  ];
-  const missing = REQUIRED.filter((id) => !$(id));
-  if (missing.length) {
+  // Required DOM guard (prevents null crashes)
+  const REQUIRED = Object.keys(el).filter((k) => el[k] === null);
+  if (REQUIRED.length) {
     document.body.innerHTML = `
       <div style="padding:16px;font-family:system-ui;background:#111;color:#fff">
         <h2 style="margin:0 0 10px 0;color:#ffcc66">DOM ERROR — Missing IDs</h2>
-        <pre style="background:#1a1a1a;padding:12px;border-radius:10px;border:1px solid #333;white-space:pre-wrap">${missing.join("\n")}</pre>
+        <pre style="background:#1a1a1a;padding:12px;border-radius:10px;border:1px solid #333;white-space:pre-wrap">${REQUIRED.join("\n")}</pre>
       </div>
     `;
-    throw new Error("Missing DOM IDs: " + missing.join(", "));
+    throw new Error("Missing DOM IDs: " + REQUIRED.join(", "));
   }
 
-  /***********************
-   * STATE
-   ***********************/
   let provider = null;
   let signer = null;
   let userAddress = null;
@@ -126,15 +108,11 @@
   let feeBps = 100;
   let feeWallet = "—";
 
-  // recipients: custom weights (ratios), not forced to 100
   let rows = [
     { account: "", weight: "" },
     { account: "", weight: "" },
   ];
 
-  /***********************
-   * LOG + STATUS
-   ***********************/
   function log(line) {
     const ts = new Date().toLocaleTimeString();
     el.log.textContent = `[${ts}] ${line}\n` + el.log.textContent;
@@ -160,9 +138,6 @@
     try { return ethers.utils.isAddress(a); } catch { return false; }
   }
 
-  /***********************
-   * OPERATOR CONSOLE TOGGLE
-   ***********************/
   function setOpsEnabled(on) {
     el.opsPanel.style.display = on ? "block" : "none";
     el.btnOps.textContent = on ? "Operator Console: ON" : "Operator Console: OFF";
@@ -174,9 +149,6 @@
     return localStorage.getItem("zeph_ops") === "1";
   }
 
-  /***********************
-   * RECIPIENTS UI
-   ***********************/
   function updateTotalWeight() {
     const total = rows
       .map((r) => Number(r.weight || 0))
@@ -252,9 +224,6 @@
     return { ok: true, accounts, weights };
   }
 
-  /***********************
-   * WALLET + CHAIN
-   ***********************/
   async function ensureProvider() {
     if (!window.ethereum) {
       setError("MetaMask not detected. Install MetaMask extension, then refresh.");
@@ -302,7 +271,6 @@
     el.teleSplitter.textContent = cfg.splitter;
     log(`SPLITTER READY ✅ ${cfg.splitter}`);
 
-    // Read fee data from contract
     try {
       feeBps = Number(await splitter.feeBps());
       feeWallet = await splitter.feeWallet();
@@ -353,7 +321,7 @@
         method: "wallet_switchEthereumChain",
         params: [{ chainId: cfg.chainIdHex }],
       });
-      // chainChanged event will also fire, but update now
+
       currentChainKey = key;
       await syncChainFromWallet();
       await initContracts();
@@ -363,9 +331,6 @@
     }
   }
 
-  /***********************
-   * TOKEN LOAD + TELEMETRY
-   ***********************/
   async function loadToken(addr) {
     if (!isAddr(addr)) {
       token = null;
@@ -396,7 +361,6 @@
 
     const cfg = CONTRACTS[currentChainKey];
 
-    // native balance
     if (userAddress) {
       try {
         const bal = await provider.getBalance(userAddress);
@@ -408,7 +372,6 @@
       el.teleNative.textContent = "—";
     }
 
-    // token data
     const addr = (el.inpToken.value || "").trim();
     if (isAddr(addr)) {
       await loadToken(addr);
@@ -430,9 +393,6 @@
     }
   }
 
-  /***********************
-   * APPROVE + EXECUTE
-   ***********************/
   async function approveToken() {
     setError("");
     if (!signer || !userAddress) return setError("Connect wallet first.");
@@ -447,15 +407,27 @@
     await loadToken(taddr);
 
     const cfg = CONTRACTS[currentChainKey];
-    const amountWei = ethers.utils.parseUnits(amt, tokenDecimals);
+
+    // Approve amount: either exact amount OR max uint256
+    const approveMax = !!el.chkApproveMax.checked;
+    const amountWei = approveMax
+      ? ethers.constants.MaxUint256
+      : ethers.utils.parseUnits(amt, tokenDecimals);
 
     try {
       el.btnApprove.disabled = true;
-      setStatus(`Approving ${tokenSymbol} for splitter…`);
+      el.btnExecute.disabled = true;
 
+      setStatus(approveMax ? `Approving MAX ${tokenSymbol}…` : `Approving ${amt} ${tokenSymbol}…`);
+
+      // IMPORTANT: ensure token uses signer
       const tx = await token.connect(signer).approve(cfg.splitter, amountWei);
       log(`Approve tx: ${tx.hash}`);
       await tx.wait();
+
+      // Verify allowance now
+      const allow = await token.allowance(userAddress, cfg.splitter);
+      log(`Allowance now: ${ethers.utils.formatUnits(allow, tokenDecimals)} ${tokenSymbol}`);
 
       setStatus("Approve confirmed ✅");
       await refreshTelemetry();
@@ -463,6 +435,7 @@
       setError(e?.data?.message || e?.message || "Approve failed.");
     } finally {
       el.btnApprove.disabled = false;
+      el.btnExecute.disabled = false;
     }
   }
 
@@ -485,22 +458,19 @@
     const cfg = CONTRACTS[currentChainKey];
     const amountWei = ethers.utils.parseUnits(amt, tokenDecimals);
 
-    // pre-check allowance (reduces confusing errors)
+    // Hard pre-check allowance
     try {
       const allow = await token.allowance(userAddress, cfg.splitter);
       if (allow.lt(amountWei)) {
-        return setError(`Allowance too low. Approve at least ${amt} ${tokenSymbol} first.`);
+        return setError(`Allowance too low. Click Approve (or enable Approve Max) then retry.`);
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
 
     try {
       el.btnExecute.disabled = true;
-      setStatus("Preflight… building payload.");
+      setStatus("Executing split…");
 
-      log(`EXECUTE: token=${tokenSymbol} amount=${amt}`);
-      log(`EXECUTE: recipients=${vr.accounts.length} weightsTotal=${vr.weights.reduce((a,b)=>a.add(b), ethers.BigNumber.from(0)).toString()}`);
+      log(`EXECUTE: token=${tokenSymbol} amount=${amt} recipients=${vr.accounts.length}`);
 
       const tx = await splitter.connect(signer).depositAndDistribute(
         taddr,
@@ -522,16 +492,11 @@
     }
   }
 
-  /***********************
-   * EVENTS + BOOT
-   ***********************/
   function bindEvents() {
     el.btnConnect.addEventListener("click", connectWallet);
     el.btnSwitch.addEventListener("click", switchNetwork);
 
-    el.btnOps.addEventListener("click", () => {
-      setOpsEnabled(!getOpsEnabled());
-    });
+    el.btnOps.addEventListener("click", () => setOpsEnabled(!getOpsEnabled()));
 
     el.btnAdd.addEventListener("click", () => {
       rows.push({ account: "", weight: "" });
@@ -585,36 +550,36 @@
   }
 
   async function boot() {
-    // Operator console default OFF, but remembered
+    // 1) UI setup
     setOpsEnabled(getOpsEnabled());
-
     renderRecipients();
     bindEvents();
 
-    // initial network label
+    // 2) Initial labels
     const key = el.selChain.value || "bsc";
     currentChainKey = CONTRACTS[key] ? key : "bsc";
     el.pillNet.textContent = `Network: ${CONTRACTS[currentChainKey].chainName}`;
     el.teleSplitter.textContent = CONTRACTS[currentChainKey].splitter;
 
-    setStatus("Ready. Connect wallet to begin.");
-
-    // silent connect if already authorized
+    // 3) Silent connect
     if (window.ethereum) {
       await ensureProvider();
       const accs = await window.ethereum.request({ method: "eth_accounts" });
       if (accs && accs.length) {
         signer = provider.getSigner();
         userAddress = accs[0];
+
         setConnectedUI();
         await syncChainFromWallet();
         await initContracts();
         await refreshTelemetry();
         setStatus("Auto-connected ✅");
-      } else {
-        log("BOOT: No authorized wallet yet.");
+        return; // IMPORTANT: do not log "connect wallet to begin" after this
       }
     }
+
+    // Only show this if NOT connected
+    setStatus("Ready. Connect wallet to begin.");
   }
 
   if (document.readyState === "loading") {
