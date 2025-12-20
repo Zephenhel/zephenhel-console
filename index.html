@@ -4,225 +4,662 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>ZEPHENHEL CITADEL</title>
-  <link rel="stylesheet" href="./styles.css" />
+
+  <!-- Ethers v5 -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+
+  <!-- IMPORTANT:
+       GitHub Pages sometimes serves stale cached CSS or wrong relative paths.
+       We embed critical CSS here so the UI NEVER falls back to plain browser defaults.
+       styles.css below is still loaded for easy editing / overrides.
+  -->
+  <style>
+    :root{
+      --bg:#070a10;
+      --panel:#0c1220;
+      --panel2:#0b1020;
+      --line:rgba(255,255,255,.10);
+      --line2:rgba(245,196,77,.22);
+      --text:rgba(255,255,255,.92);
+      --muted:rgba(255,255,255,.68);
+      --muted2:rgba(255,255,255,.55);
+      --gold:#f5c44d;
+      --gold2:#c79a2a;
+      --good:#58d68d;
+      --bad:#ff5a5f;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      --r:18px;
+      --shadow: 0 18px 45px rgba(0,0,0,.45);
+    }
+
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0;
+      font-family:var(--sans);
+      color:var(--text);
+      background:
+        radial-gradient(1200px 650px at 20% 10%, rgba(245,196,77,.10), transparent 60%),
+        radial-gradient(900px 520px at 75% 35%, rgba(79,143,255,.10), transparent 55%),
+        radial-gradient(700px 520px at 40% 90%, rgba(140,255,210,.06), transparent 60%),
+        linear-gradient(180deg, #04060c, #050813 55%, #05060b);
+      overflow-x:hidden;
+    }
+
+    a{ color:var(--gold); text-decoration:none; }
+    a:hover{ text-decoration:underline; }
+
+    .topbar{
+      position:sticky; top:0; z-index:50;
+      backdrop-filter: blur(10px);
+      background: rgba(4,6,12,.70);
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .topbar-inner{
+      max-width:1100px;
+      margin:0 auto;
+      padding:14px 16px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+    }
+    .brand{
+      display:flex; align-items:center; gap:12px;
+      min-width:240px;
+    }
+    .brand-badge{
+      width:38px; height:38px;
+      display:grid; place-items:center;
+      border-radius:12px;
+      border:1px solid rgba(245,196,77,.35);
+      background: rgba(245,196,77,.10);
+      font-weight:800;
+      color:var(--gold);
+      box-shadow: 0 10px 30px rgba(245,196,77,.08);
+    }
+    .brand-text h1{
+      margin:0;
+      font-size:14px;
+      letter-spacing:.16em;
+    }
+    .brand-text p{
+      margin:2px 0 0 0;
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    .pills{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+    .pill{
+      font-size:12px;
+      padding:10px 12px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(10,14,22,.55);
+      color:rgba(255,255,255,.86);
+      max-width: 320px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .pill.net{ border-color: rgba(79,143,255,.20); }
+    .pill.wallet{ border-color: rgba(140,255,210,.20); }
+
+    .btn{
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      color: rgba(255,255,255,.92);
+      padding:10px 14px;
+      border-radius: 12px;
+      cursor:pointer;
+      font-weight:700;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+      font-size:12px;
+      transition: transform .06s ease, background .12s ease, border-color .12s ease;
+      user-select:none;
+    }
+    .btn:hover{ transform: translateY(-1px); }
+    .btn:disabled{ opacity:.45; cursor:not-allowed; transform:none; }
+    .btn.gold{
+      background: linear-gradient(180deg, rgba(245,196,77,.95), rgba(199,154,42,.95));
+      border-color: rgba(245,196,77,.55);
+      color: #0b0d14;
+      text-shadow: none;
+    }
+    .btn.ghost{
+      background: rgba(255,255,255,.05);
+    }
+    .btn.connected{
+      background: rgba(88,214,141,.16);
+      border-color: rgba(88,214,141,.35);
+      color: rgba(255,255,255,.95);
+    }
+
+    .container{
+      max-width:1100px;
+      margin:0 auto;
+      padding:18px 16px 42px;
+    }
+
+    .warframe{
+      position:relative;
+      border-radius: 26px;
+      border: 1px solid rgba(255,255,255,.10);
+      background:
+        radial-gradient(900px 520px at 25% 20%, rgba(245,196,77,.10), transparent 55%),
+        radial-gradient(860px 540px at 80% 35%, rgba(79,143,255,.08), transparent 60%),
+        linear-gradient(180deg, rgba(10,14,22,.75), rgba(8,10,16,.75));
+      box-shadow: var(--shadow);
+      overflow:hidden;
+      padding:18px;
+    }
+    .scanlines{
+      position:absolute; inset:0;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(255,255,255,.03),
+        rgba(255,255,255,.03) 1px,
+        transparent 1px,
+        transparent 4px
+      );
+      opacity:.20;
+      pointer-events:none;
+      mix-blend-mode: overlay;
+    }
+    .gridlines{
+      position:absolute; inset:0;
+      background:
+        linear-gradient(to right, rgba(255,255,255,.06) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255,255,255,.06) 1px, transparent 1px);
+      background-size: 70px 70px;
+      opacity:.08;
+      pointer-events:none;
+    }
+    .gloworb{
+      position:absolute; width:220px; height:220px; border-radius:999px;
+      filter: blur(25px);
+      opacity:.22;
+      pointer-events:none;
+    }
+    .gloworb.a{ left:-60px; top:45px; background: rgba(245,196,77,.85); }
+    .gloworb.b{ right:-70px; bottom:40px; background: rgba(79,143,255,.85); }
+
+    .grid{
+      display:grid;
+      gap:14px;
+      grid-template-columns: 1.05fr .95fr;
+      position:relative;
+      z-index:2;
+    }
+    @media (max-width: 980px){
+      .grid{ grid-template-columns: 1fr; }
+    }
+
+    .card{
+      border-radius: var(--r);
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(8,10,16,.50);
+      padding:16px;
+    }
+
+    .card-title{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:10px;
+    }
+    .card-title h2{
+      margin:0;
+      font-size:13px;
+      letter-spacing:.18em;
+      text-transform:uppercase;
+    }
+    .badge{
+      font-size:11px;
+      color: rgba(255,255,255,.88);
+      border:1px solid rgba(245,196,77,.22);
+      background: rgba(245,196,77,.10);
+      padding:8px 10px;
+      border-radius: 999px;
+      text-transform:uppercase;
+      letter-spacing:.14em;
+      font-weight:800;
+      white-space:nowrap;
+    }
+
+    .label{
+      font-size:11px;
+      letter-spacing:.16em;
+      text-transform:uppercase;
+      color: rgba(255,255,255,.78);
+      margin:10px 0 6px;
+    }
+
+    input, select{
+      width:100%;
+      border-radius: 12px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      color: rgba(255,255,255,.94);
+      padding:12px 12px;
+      outline:none;
+      font-size:14px;
+    }
+    input::placeholder{ color: rgba(255,255,255,.35); }
+    input:focus, select:focus{
+      border-color: rgba(245,196,77,.35);
+      box-shadow: 0 0 0 3px rgba(245,196,77,.10);
+    }
+
+    .small{ font-size:12px; color: var(--muted); margin-top:6px; line-height:1.25rem; }
+
+    .hr{
+      height:1px;
+      background: rgba(255,255,255,.10);
+      margin:14px 0;
+    }
+
+    .row2{
+      display:grid;
+      grid-template-columns: 1fr 0.9fr;
+      gap:12px;
+      align-items:stretch;
+    }
+    @media (max-width: 520px){
+      .row2{ grid-template-columns: 1fr; }
+    }
+
+    .miniCard{
+      border-radius: 14px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.04);
+      padding:12px;
+    }
+    .miniTitle{
+      font-size:11px;
+      letter-spacing:.16em;
+      text-transform:uppercase;
+      color: rgba(255,255,255,.72);
+      margin-bottom:8px;
+    }
+    .miniValue{
+      font-family: var(--mono);
+      font-size: 18px;
+      margin-bottom:6px;
+    }
+    .miniSub{ font-size:12px; color: rgba(255,255,255,.72); }
+    .miniSub2{ font-size:12px; color: rgba(255,255,255,.60); margin-top:6px; }
+
+    .btnRow{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top:12px;
+    }
+
+    .inlineBtns{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+
+    .notice{
+      border-radius: 14px;
+      border:1px solid rgba(79,143,255,.18);
+      background: rgba(79,143,255,.08);
+      padding:12px;
+      color: rgba(255,255,255,.85);
+      font-size:12px;
+      line-height:1.25rem;
+    }
+
+    .error{
+      border-radius: 14px;
+      border:1px solid rgba(255,90,95,.28);
+      background: rgba(255,90,95,.10);
+      padding:12px;
+      color: rgba(255,255,255,.92);
+      font-size:12px;
+      line-height:1.25rem;
+      margin-top:12px;
+      white-space: pre-wrap;
+    }
+
+    .footer-note{
+      margin-top:12px;
+      font-size:12px;
+      color: rgba(255,255,255,.55);
+    }
+
+    /* Recipients rows */
+    .row{
+      display:grid;
+      grid-template-columns: 1fr 120px 44px;
+      gap:10px;
+      margin-bottom:10px;
+    }
+    @media (max-width: 620px){
+      .row{ grid-template-columns: 1fr; }
+      .row button{ width:100%; }
+    }
+
+    .teleGrid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+    }
+    @media (max-width: 520px){
+      .teleGrid{ grid-template-columns: 1fr; }
+    }
+    .teleBox{
+      border-radius: 14px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.04);
+      padding:12px;
+    }
+    .teleK{
+      font-size:11px;
+      letter-spacing:.16em;
+      text-transform:uppercase;
+      color: rgba(255,255,255,.70);
+      margin-bottom:6px;
+    }
+    .teleV{
+      font-family: var(--mono);
+      font-size: 13px;
+      color: rgba(255,255,255,.92);
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .teleV.mono{ font-family: var(--mono); }
+
+    .soundToggle{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-size:12px;
+      color: rgba(255,255,255,.78);
+      user-select:none;
+    }
+
+    /* Runtime Log */
+    pre.log{
+      margin:0;
+      margin-top:10px;
+      border-radius: 16px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(0,0,0,.35);
+      padding:12px;
+      min-height: 260px;
+      max-height: 360px;
+      overflow:auto;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.35rem;
+      color: rgba(255,255,255,.90);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* Modal */
+    #modal{
+      display:none;
+      position:fixed;
+      inset:0;
+      background: rgba(0,0,0,.65);
+      z-index: 9999;
+    }
+    #modal .inner{
+      max-width: 740px;
+      margin: 7vh auto;
+      padding: 16px;
+    }
+    #modal .card{
+      border-color: rgba(245,196,77,.22);
+      background: rgba(10,12,18,.88);
+      backdrop-filter: blur(10px);
+    }
+  </style>
+
+  <!-- Optional external CSS overrides (safe). Cache-busted. -->
+  <link rel="stylesheet" href="./styles.css?v=9" />
 </head>
 <body>
 
-  <header class="topbar">
-    <div class="topbar-inner">
-      <div class="brand">
-        <div class="brand-badge">Z</div>
-        <div class="brand-text">
-          <h1>ZEPHENHEL CITADEL</h1>
-          <p>Tri-Chain Distribution Console • BSC • Ethereum • Polygon</p>
-        </div>
-      </div>
-
-      <div class="pills">
-        <div class="pill net" id="pillNet">THEATER: —</div>
-        <div class="pill wallet" id="pillWallet">NODE: DISCONNECTED</div>
-
-        <button class="btn ghost" id="btnSwitch" title="Switch network">SWITCH THEATER</button>
-        <button class="btn gold" id="btnConnect">LINK NODE</button>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="brand-badge">Z</div>
+      <div class="brand-text">
+        <h1>ZEPHENHEL CITADEL</h1>
+        <p>Tri-Chain Distribution Console • BSC • Ethereum • Polygon</p>
       </div>
     </div>
-  </header>
 
-  <main class="container">
-    <div class="warframe">
-      <div class="scanlines"></div>
-      <div class="gridlines"></div>
-      <div class="gloworb a"></div>
-      <div class="gloworb b"></div>
+    <div class="pills">
+      <div class="pill net" id="pillNet">THEATER: —</div>
+      <div class="pill wallet" id="pillWallet">NODE: DISCONNECTED</div>
 
-      <div class="grid">
-        <!-- LEFT: COMMAND -->
-        <section class="card">
-          <div class="card-title">
-            <h2>PAYLOAD COMMAND</h2>
-            <div class="badge">CITADEL</div>
-          </div>
-
-          <div class="label">THEATER (CHAIN)</div>
-          <select id="selChain">
-            <option value="bsc">BNB CHAIN</option>
-            <option value="eth">ETHEREUM</option>
-            <option value="polygon">POLYGON</option>
-          </select>
-
-          <div class="hr"></div>
-
-          <div class="label">OPERATION MODE</div>
-          <select id="selMode">
-            <option value="token">TOKEN DISTRIBUTION (ERC20/BEP20)</option>
-            <option value="native">NATIVE DISTRIBUTION (BNB/ETH/MATIC)</option>
-          </select>
-          <div class="small" id="modeHint">
-            Token mode: ARM CONTRACT → DEPLOY PAYLOAD. Fee is applied inside the splitter.
-          </div>
-
-          <div class="hr"></div>
-
-          <div id="tokenBlock">
-            <div class="label">ASSET CONTRACT (TOKEN ADDRESS)</div>
-            <input id="inpToken" placeholder="0x…" spellcheck="false" />
-            <div class="small" id="tokenNote">
-              Assets arrive on the SAME theater you execute on. (BSC USDC ≠ Ethereum USDC)
-            </div>
-          </div>
-
-          <div class="row2">
-            <div>
-              <div class="label">PAYLOAD AMOUNT</div>
-              <input id="inpAmount" placeholder="0.0" inputmode="decimal" />
-              <div class="small" id="gasHint">
-                NATIVE MAX reserves gas automatically. Token mode uses exact token amount.
-              </div>
-            </div>
-
-            <div class="miniCard">
-              <div class="miniTitle">INTEL ESTIMATE</div>
-              <div class="miniValue" id="usdEst">—</div>
-              <div class="miniSub" id="postFeeLine">Post-fee delivery —</div>
-              <div class="miniSub2">Platform fee: <span class="feeTiny">1%</span></div>
-            </div>
-          </div>
-
-          <div class="btnRow">
-            <button class="btn ghost" id="btnMax">MAX (GAS-SAFE)</button>
-            <button class="btn ghost" id="btnNormalize">NORMALIZE VECTOR</button>
-          </div>
-
-          <div class="hr"></div>
-
-          <div class="card-title" style="margin-bottom:6px;">
-            <h2>TARGET MATRIX</h2>
-            <div class="inlineBtns">
-              <div class="pill" id="totalPill">VECTOR: —</div>
-              <button class="btn ghost" id="btnAdd">+ ADD TARGET</button>
-            </div>
-          </div>
-
-          <div class="small" style="margin-bottom:8px;">
-            Allocation Vector uses share weights (e.g., 50/50). NORMALIZE VECTOR sets total to 100.
-          </div>
-
-          <div id="recipients"></div>
-
-          <div class="btnRow">
-            <button class="btn ghost" id="btnApprove">ARM CONTRACT</button>
-            <button class="btn gold" id="btnExecute">DEPLOY PAYLOAD</button>
-          </div>
-
-          <div class="notice" id="tipBox">
-            ⚠️ Assets deliver on the active theater. Recipients must view the same chain in their wallet.
-          </div>
-
-          <div class="error" id="errBox" style="display:none;"></div>
-
-          <div class="footer-note">Always test small first. Citadel is non-custodial and chain-honest.</div>
-        </section>
-
-        <!-- RIGHT: TELEMETRY -->
-        <section class="card">
-          <div class="card-title">
-            <h2>LIVE TELEMETRY</h2>
-            <label class="soundToggle">
-              <input type="checkbox" id="chkSound" checked />
-              <span>SOUND FX</span>
-            </label>
-          </div>
-
-          <div class="teleGrid">
-            <div class="teleBox">
-              <div class="teleK">NODE BALANCE</div>
-              <div class="teleV" id="teleNative">—</div>
-            </div>
-            <div class="teleBox">
-              <div class="teleK">ASSET</div>
-              <div class="teleV" id="teleSymbol">—</div>
-            </div>
-            <div class="teleBox">
-              <div class="teleK">DECIMALS</div>
-              <div class="teleV" id="teleDecimals">—</div>
-            </div>
-            <div class="teleBox">
-              <div class="teleK">ASSET BALANCE</div>
-              <div class="teleV" id="teleTokenBal">—</div>
-            </div>
-            <div class="teleBox">
-              <div class="teleK">ALLOWANCE → SPLITTER</div>
-              <div class="teleV" id="teleAllowance">—</div>
-            </div>
-            <div class="teleBox">
-              <div class="teleK">ACTIVE SPLITTER</div>
-              <div class="teleV mono" id="teleSplitter">—</div>
-            </div>
-            <div class="teleBox">
-              <div class="teleK">FEE POLICY</div>
-              <div class="teleV" id="teleFee">—</div>
-            </div>
-            <div class="teleBox">
-              <div class="teleK">SYSTEM STATUS</div>
-              <div class="teleV" id="teleStatus">Ready.</div>
-            </div>
-          </div>
-
-          <div class="hr"></div>
-
-          <div class="card-title" style="margin-bottom:6px;">
-            <h2>MISSION DEBRIEF</h2>
-            <div class="inlineBtns">
-              <button class="btn ghost" id="btnAddToken">ADD TOKEN TO WALLET</button>
-              <button class="btn ghost" id="btnViewTx">VIEW TRANSFERS</button>
-            </div>
-          </div>
-
-          <div class="notice" id="debrief" style="display:none;"></div>
-
-          <div class="hr"></div>
-
-          <div class="card-title" style="margin-bottom:6px;">
-            <h2>RUNTIME LOG</h2>
-            <div class="inlineBtns">
-              <button class="btn ghost" id="btnRefresh">REFRESH</button>
-              <button class="btn ghost" id="btnClear">CLEAR</button>
-            </div>
-          </div>
-
-          <pre class="log" id="log"></pre>
-          <div class="footer-note">Telemetry updates on LINK NODE, asset load, ARM, DEPLOY.</div>
-        </section>
-      </div>
+      <button class="btn ghost" id="btnToggleOps" title="Toggle Operator Console">OPERATOR: OFF</button>
+      <button class="btn ghost" id="btnSwitch" title="Switch network">SWITCH THEATER</button>
+      <button class="btn gold" id="btnConnect">LINK NODE</button>
     </div>
-  </main>
+  </div>
+</header>
 
-  <!-- CONFIRM MODAL -->
-  <div id="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.65); z-index:9999;">
-    <div style="max-width:720px; margin:7vh auto; padding:16px;">
-      <div class="card" style="border-color: rgba(245,196,77,.22);">
+<main class="container">
+  <div class="warframe">
+    <div class="scanlines"></div>
+    <div class="gridlines"></div>
+    <div class="gloworb a"></div>
+    <div class="gloworb b"></div>
+
+    <div class="grid">
+
+      <!-- LEFT: COMMAND -->
+      <section class="card">
         <div class="card-title">
-          <h2>CONFIRM DEPLOYMENT</h2>
-          <button class="btn ghost" id="btnModalClose">CANCEL</button>
+          <h2>PAYLOAD COMMAND</h2>
+          <div class="badge">CITADEL</div>
         </div>
-        <div class="notice" id="modalBody"></div>
+
+        <div class="label">THEATER</div>
+        <select id="selChain">
+          <option value="bsc">BNB CHAIN</option>
+          <option value="eth">ETHEREUM</option>
+          <option value="polygon">POLYGON</option>
+        </select>
 
         <div class="hr"></div>
 
-        <label style="display:flex; gap:10px; align-items:center; font-size:12px; color:rgba(255,255,255,.75);">
-          <input type="checkbox" id="chkAcknowledge" />
-          I understand funds deliver on this theater (chain) and recipients must view the same network.
-        </label>
-
-        <div class="btnRow" style="margin-top:12px;">
-          <button class="btn ghost" id="btnModalBack">BACK</button>
-          <button class="btn gold" id="btnModalConfirm">CONFIRM & DEPLOY</button>
+        <div class="label">OPERATION MODE</div>
+        <select id="selMode">
+          <option value="token">TOKEN DISTRIBUTION (ERC20/BEP20)</option>
+          <option value="native">NATIVE DISTRIBUTION (COMING SOON)</option>
+        </select>
+        <div class="small" id="modeHint">
+          Token mode: ARM CONTRACT → DEPLOY PAYLOAD. Fee is applied inside the splitter.
         </div>
+
+        <div class="hr"></div>
+
+        <div id="tokenBlock">
+          <div class="label">ASSET CONTRACT</div>
+          <input id="inpToken" placeholder="0x…" spellcheck="false" />
+          <div class="small" id="tokenNote">
+            Assets deliver on the SAME theater you execute on. (BSC USDC ≠ Ethereum USDC)
+          </div>
+        </div>
+
+        <div class="row2">
+          <div>
+            <div class="label">PAYLOAD AMOUNT</div>
+            <input id="inpAmount" placeholder="0.0" inputmode="decimal" />
+            <div class="small" id="gasHint">
+              Token mode uses exact token amount. (Native split is coming later.)
+            </div>
+          </div>
+
+          <div class="miniCard">
+            <div class="miniTitle">INTEL ESTIMATE</div>
+            <div class="miniValue" id="usdEst">—</div>
+            <div class="miniSub" id="postFeeLine">Post-fee delivery —</div>
+            <div class="miniSub2">Platform fee: <span class="feeTiny">1%</span></div>
+          </div>
+        </div>
+
+        <div class="btnRow">
+          <button class="btn ghost" id="btnNormalize">NORMALIZE VECTOR</button>
+        </div>
+
+        <div class="hr"></div>
+
+        <div class="card-title" style="margin-bottom:6px;">
+          <h2>TARGET MATRIX</h2>
+          <div class="inlineBtns">
+            <div class="pill" id="totalPill">VECTOR: —</div>
+            <button class="btn ghost" id="btnAdd">+ ADD TARGET</button>
+          </div>
+        </div>
+
+        <div class="small" style="margin-bottom:8px;">
+          Allocation uses share weights (example 50/50). Normalize sets total to 100.
+        </div>
+
+        <div id="recipients"></div>
+
+        <div class="btnRow">
+          <button class="btn ghost" id="btnApprove">ARM CONTRACT</button>
+          <button class="btn gold" id="btnExecute">DEPLOY PAYLOAD</button>
+        </div>
+
+        <div class="notice" id="tipBox" style="margin-top:12px;">
+          ⚠️ Chain-locked delivery: recipients must view the same network in their wallet to see the token.
+        </div>
+
+        <div class="error" id="errBox" style="display:none;"></div>
+
+        <div class="footer-note">
+          Always test small first. Citadel is non-custodial and chain-honest.
+        </div>
+      </section>
+
+      <!-- RIGHT: TELEMETRY + LOG -->
+      <section class="card">
+        <div class="card-title">
+          <h2>LIVE TELEMETRY</h2>
+          <label class="soundToggle">
+            <input type="checkbox" id="chkSound" checked />
+            <span>SOUND FX</span>
+          </label>
+        </div>
+
+        <div class="teleGrid">
+          <div class="teleBox">
+            <div class="teleK">NODE BALANCE</div>
+            <div class="teleV" id="teleNative">—</div>
+          </div>
+          <div class="teleBox">
+            <div class="teleK">ASSET</div>
+            <div class="teleV" id="teleSymbol">—</div>
+          </div>
+          <div class="teleBox">
+            <div class="teleK">DECIMALS</div>
+            <div class="teleV" id="teleDecimals">—</div>
+          </div>
+          <div class="teleBox">
+            <div class="teleK">ASSET BALANCE</div>
+            <div class="teleV" id="teleTokenBal">—</div>
+          </div>
+          <div class="teleBox">
+            <div class="teleK">ALLOWANCE → SPLITTER</div>
+            <div class="teleV" id="teleAllowance">—</div>
+          </div>
+          <div class="teleBox">
+            <div class="teleK">ACTIVE SPLITTER</div>
+            <div class="teleV mono" id="teleSplitter">—</div>
+          </div>
+          <div class="teleBox">
+            <div class="teleK">FEE POLICY</div>
+            <div class="teleV" id="teleFee">—</div>
+          </div>
+          <div class="teleBox">
+            <div class="teleK">SYSTEM STATUS</div>
+            <div class="teleV" id="teleStatus">Ready.</div>
+          </div>
+        </div>
+
+        <div class="hr"></div>
+
+        <div class="card-title" style="margin-bottom:6px;">
+          <h2>MISSION DEBRIEF</h2>
+          <div class="inlineBtns">
+            <button class="btn ghost" id="btnAddToken">ADD TOKEN TO WALLET</button>
+            <button class="btn ghost" id="btnViewTx">VIEW TX</button>
+          </div>
+        </div>
+
+        <div class="notice" id="debrief" style="display:none;"></div>
+
+        <div class="hr"></div>
+
+        <div class="card-title" style="margin-bottom:6px;">
+          <h2>RUNTIME LOG</h2>
+          <div class="inlineBtns">
+            <button class="btn ghost" id="btnRefresh">REFRESH</button>
+            <button class="btn ghost" id="btnClear">CLEAR</button>
+          </div>
+        </div>
+
+        <pre class="log" id="log"></pre>
+
+        <div class="footer-note" id="opsHint" style="display:none;">
+          Operator Console shows deeper guardrails + preflight logs.
+        </div>
+      </section>
+
+    </div>
+  </div>
+</main>
+
+<!-- CONFIRM MODAL -->
+<div id="modal">
+  <div class="inner">
+    <div class="card">
+      <div class="card-title">
+        <h2>CONFIRM DEPLOYMENT</h2>
+        <button class="btn ghost" id="btnModalClose">CANCEL</button>
+      </div>
+
+      <div class="notice" id="modalBody"></div>
+
+      <div class="hr"></div>
+
+      <label style="display:flex; gap:10px; align-items:center; font-size:12px; color:rgba(255,255,255,.75);">
+        <input type="checkbox" id="chkAcknowledge" />
+        I understand funds deliver on this theater (chain) and recipients must view the same network.
+      </label>
+
+      <div class="btnRow" style="margin-top:12px;">
+        <button class="btn ghost" id="btnModalBack">BACK</button>
+        <button class="btn gold" id="btnModalConfirm">CONFIRM & DEPLOY</button>
       </div>
     </div>
   </div>
+</div>
 
-  <script src="./app.js"></script>
+<script src="./app.js?v=9"></script>
 </body>
 </html>
