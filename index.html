@@ -14,23 +14,17 @@
   <div class="topbar-inner">
     <div class="brand">
       <div class="brand-badge">Z</div>
-      <div class="brand-text">
+      <div>
         <h1>ZEPHENHEL CITADEL</h1>
         <p>Tri-chain token splitter • BSC • Ethereum • Polygon</p>
       </div>
     </div>
 
     <div class="pills">
-      <div class="pill net" id="pillNet">Network: —</div>
-      <div class="pill wallet" id="pillWallet">Wallet: Disconnected</div>
-
-      <button class="btn ghost" id="btnSwitch">Switch Network</button>
-      <button class="btn gold" id="btnConnect">Connect</button>
-
-      <label class="pill" style="display:flex;gap:8px;align-items:center;">
-        <input type="checkbox" id="chkOperator" />
-        <span>Operator Console</span>
-      </label>
+      <div class="pill" id="pillNet">Network: —</div>
+      <div class="pill" id="pillWallet">Wallet: Disconnected</div>
+      <button class="btn ghost" id="btnSwitch" type="button">Switch</button>
+      <button class="btn gold" id="btnConnect" type="button">Connect</button>
     </div>
   </div>
 </header>
@@ -38,94 +32,72 @@
 <main class="container">
   <div class="grid">
 
-    <!-- LEFT: SPLIT COMMAND -->
+    <!-- LEFT -->
     <section class="card">
-      <div class="card-title">
-        <h2>Split Command</h2>
-        <div class="badge">Splitter</div>
-      </div>
+      <h2>Split Command</h2>
 
-      <div class="label">Chain</div>
+      <label>Chain</label>
       <select id="selChain">
-        <option value="bsc">BNB Chain (BSC)</option>
+        <option value="bsc">BSC Mainnet</option>
         <option value="eth">Ethereum</option>
         <option value="polygon">Polygon</option>
       </select>
 
-      <div class="hr"></div>
+      <hr>
 
-      <div class="label">Token address (ERC20 / BEP20)</div>
+      <label>Token address (ERC20 / BEP20)</label>
       <input id="inpToken" placeholder="0x…" spellcheck="false" />
 
-      <div class="label">Amount</div>
-      <input id="inpAmount" placeholder="0.10" inputmode="decimal" />
+      <label>Amount</label>
+      <input id="inpAmount" placeholder="1.0" inputmode="decimal" />
 
-      <div class="row-actions" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;">
-        <label class="pill" style="display:flex;gap:8px;align-items:center;">
-          <input type="checkbox" id="chkApproveMax" />
-          <span>Approve MAX</span>
-        </label>
-        <div class="notice" style="margin:0;">
-          Platform fee is handled by the contract (<span class="feeTiny">1%</span>).
+      <div class="notice">
+        Platform fee is handled by the splitter contract.
+      </div>
+
+      <hr>
+
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+        <h3 style="margin:0;">Recipients</h3>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <span id="totalPill">Total: 0</span>
+          <button class="btn ghost" id="btnNormalize" type="button">Normalize</button>
+          <button class="btn ghost" id="btnAdd" type="button">+ Add</button>
         </div>
       </div>
 
-      <div class="hr"></div>
+      <div id="recipients" style="margin-top:10px;"></div>
 
-      <div class="card-title" style="margin-bottom:6px;">
-        <h2>Recipients</h2>
-        <div class="inlineBtns" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <div class="pill" id="totalPill">Total weight: —</div>
-          <button class="btn ghost" id="btnAdd">+ Add</button>
-        </div>
+      <div class="row-actions" style="margin-top:12px; display:flex; gap:10px;">
+        <button class="btn ghost" id="btnApprove" type="button">Approve</button>
+        <button class="btn gold" id="btnExecute" type="button">Execute Split</button>
       </div>
 
-      <div class="small">
-        Enter any positive weights (ex: 50 / 50 or 70 / 20 / 10). They don’t need to sum to 100.
-      </div>
-
-      <div class="hr"></div>
-
-      <div id="recipients"></div>
-
-      <div class="btnRow" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
-        <button class="btn ghost" id="btnApprove">Approve</button>
-        <button class="btn gold" id="btnExecute">Execute Split</button>
-      </div>
-
-      <div class="error" id="errBox" style="display:none;margin-top:10px;"></div>
-
-      <div class="footer-note">Always test small amounts first.</div>
+      <div class="error" id="errBox" style="display:none; margin-top:12px;"></div>
+      <p class="footer-note">Always test small amounts first.</p>
     </section>
 
-    <!-- RIGHT: OPERATOR CONSOLE (hidden by default) -->
-    <section class="card" id="operatorPanel" style="display:none;">
-      <div class="card-title">
-        <h2>Operator Console</h2>
-        <div class="inlineBtns" style="display:flex;gap:8px;">
-          <button class="btn ghost" id="btnRefresh">Refresh</button>
-          <button class="btn ghost" id="btnClear">Clear Log</button>
-        </div>
-      </div>
+    <!-- RIGHT -->
+    <section class="card">
+      <h2>Live Telemetry</h2>
 
       <div class="tele">
-        <div class="small">Native balance: <span id="teleNative">—</span></div>
-        <div class="small">Token symbol: <span id="teleSymbol">—</span></div>
-        <div class="small">Decimals: <span id="teleDecimals">—</span></div>
-        <div class="small">Token balance: <span id="teleTokenBal">—</span></div>
-        <div class="small">Allowance → splitter: <span id="teleAllowance">—</span></div>
-        <div class="small">Active splitter: <span id="teleSplitter">—</span></div>
-        <div class="small">Status: <span id="teleStatus">Ready</span></div>
+        <div>Native balance: <span id="teleNative">—</span></div>
+        <div>Token symbol: <span id="teleSymbol">—</span></div>
+        <div>Decimals: <span id="teleDecimals">—</span></div>
+        <div>Token balance: <span id="teleTokenBal">—</span></div>
+        <div>Allowance → splitter: <span id="teleAllowance">—</span></div>
+        <div>Active splitter: <span id="teleSplitter">—</span></div>
+        <div>Status: <span id="teleStatus">Ready</span></div>
       </div>
 
-      <div class="hr"></div>
-
-      <div class="card-title" style="margin-bottom:6px;">
-        <h2>Runtime Log</h2>
+      <div style="display:flex; gap:10px; margin-top:12px;">
+        <button class="btn ghost" id="btnRefresh" type="button">Refresh</button>
+        <button class="btn ghost" id="btnClear" type="button">Clear Log</button>
       </div>
+
+      <h3 style="margin-top:12px;">Runtime Log</h3>
       <pre class="log" id="log"></pre>
-
-      <div class="footer-note">Operator console is for debugging + proof.</div>
     </section>
 
   </div>
