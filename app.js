@@ -3,6 +3,11 @@
   "use strict";
 
   /***********************
+   * YOU (GLOBAL FEE WALLET DISPLAY)
+   ***********************/
+  const GLOBAL_FEE_WALLET = "0x9285d738aD948C09E14BAc12e8D2Cc3E11eC59ec";
+
+  /***********************
    * CONTRACT MAP (YOUR VERIFIED ADDRESSES)
    ***********************/
   const CONTRACTS = {
@@ -16,6 +21,11 @@
       tokenVault: "0x69BD92784b9ED63a40d2cf51b475Ba68B37bD59E",
       nativeSplitter:"0x190304170d78ba5144BFC617187B9e0b3f723F66",
       nativeVault: "0x7F86efd70c9CbF67d35e6162513DD6D56F8dBFE9",
+      rpcFallbacks: [
+        "https://bsc-dataseed.binance.org/",
+        "https://bsc-dataseed1.binance.org/",
+        "https://bsc-dataseed2.binance.org/",
+      ],
     },
     ethereum: {
       chainId: 1,
@@ -27,6 +37,10 @@
       tokenVault: "0x798b4620d29cb6f1d4bFdA88D4537769E2BDdD47",
       nativeSplitter:"0xBcd7C5054522bf0A6DB5a63Fa2513a428e70b0FD",
       nativeVault: "0xB0b6b555d37220611e6d3d8c0DB6eC0C0b9A81Fc",
+      rpcFallbacks: [
+        "https://cloudflare-eth.com",
+        "https://rpc.ankr.com/eth",
+      ],
     },
     polygon: {
       chainId: 137,
@@ -36,14 +50,17 @@
       explorer: "https://polygonscan.com",
       tokenSplitter: "0x05948E68137eC131E1f0E27028d09fa174679ED4",
       tokenVault: "0xde07160A2eC236315Dd27e9600f88Ba26F86f06e",
-      // You confirmed the D01a one is NOT used. Using your v2 native splitter:
-      nativeSplitter:"0xe59bd693661bB4201C1E91EB7b2A88E525C4cB99",
+      nativeSplitter:"0xe59bd693661bB4201C1E91EB7b2A88E525C4cB99", // your v2 native splitter
       nativeVault: "0xEB3992D48964783FC6B9c9881DfF67cC91ce2b4F",
+      rpcFallbacks: [
+        "https://polygon-rpc.com",
+        "https://rpc.ankr.com/polygon",
+      ],
     },
   };
 
   /***********************
-   * ABIs (MINIMAL)
+   * ABIs (MINIMAL + EVENTS)
    ***********************/
   const ERC20_ABI = [
     "function symbol() view returns (string)",
@@ -53,21 +70,18 @@
     "function approve(address spender, uint256 amount) returns (bool)",
   ];
 
-  // ZephFlexSplitter
   const TOKEN_SPLITTER_ABI = [
     "function feeBps() view returns (uint16)",
     "function feeWallet() view returns (address)",
     "function depositAndDistribute(address token, address[] accounts, uint256[] shares, uint256 amount) external",
   ];
 
-  // ZephNativeSplitter
   const NATIVE_SPLITTER_ABI = [
     "function feeBps() view returns (uint16)",
     "function feeWallet() view returns (address)",
     "function distributeNative(address[] accounts, uint256[] shares) external payable",
   ];
 
-  // ZephInheritanceVault (token)
   const TOKEN_VAULT_ABI = [
     "function feeBps() view returns (uint16)",
     "function feeWallet() view returns (address)",
@@ -77,9 +91,9 @@
     "function unfreezeVault(uint256 vaultId) external",
     "function executeInheritance(uint256 vaultId) external",
     "function getVault(uint256 vaultId) view returns (tuple(address owner,address token,address[] recipients,uint256[] shares,uint256 totalAmount,uint64 heartbeat,uint64 inactivityPeriod,bool frozen,bool executed,address safeWallet))",
+    "event VaultCreated(uint256 indexed vaultId, address indexed owner, address indexed token, uint256 amount, uint64 inactivityPeriod, address safeWallet)",
   ];
 
-  // ZephNativeInheritanceVault (native)
   const NATIVE_VAULT_ABI = [
     "function nativeSplitter() view returns (address)",
     "function createVault(address executor, uint64 inactivityPeriodSeconds, address safeWallet) external returns (uint256 vaultId)",
@@ -90,6 +104,7 @@
     "function emergencyMoveToSafe(uint256 vaultId) external",
     "function execute(uint256 vaultId, address[] accounts, uint256[] shares) external",
     "function getVault(uint256 vaultId) view returns (tuple(address owner,address executor,address safeWallet,uint64 heartbeat,uint64 inactivityPeriod,bool frozen,bool executed,uint256 balance))",
+    "event VaultCreated(uint256 indexed vaultId, address indexed vaultOwner, address indexed executor, address safeWallet, uint64 inactivityPeriod)",
   ];
 
   /***********************
@@ -103,9 +118,10 @@
     btnSwitch: $("btnSwitch"),
     btnConnect: $("btnConnect"),
     selChain: $("selChain"),
+    feeWalletInline: $("feeWalletInline"),
 
-    chkOperator: $("chkOperator"),
     chkSound: $("chkSound"),
+    radar: $("radar"),
 
     tabs: Array.from(document.querySelectorAll(".tab")),
     panes: {
@@ -113,9 +129,12 @@
       "split-native": $("pane-split-native"),
       "vault-token": $("pane-vault-token"),
       "vault-native": $("pane-vault-native"),
+      "my-vaults": $("pane-my-vaults"),
     },
+    paneTitle: $("paneTitle"),
+    paneBadge: $("paneBadge"),
 
-    // telemetry + log
+    // telemetry
     teleNative: $("teleNative"),
     teleSymbol: $("teleSymbol"),
     teleDecimals: $("teleDecimals"),
@@ -124,14 +143,12 @@
     teleActive: $("teleActive"),
     teleFee: $("teleFee"),
     teleStatus: $("teleStatus"),
+
     btnRefresh: $("btnRefresh"),
     btnClear: $("btnClear"),
+    btnViewExplorer: $("btnViewExplorer"),
     log: $("log"),
     errBox: $("errBox"),
-
-    // labels on native tabs
-    sn_symbol: $("sn_symbol"),
-    vn_symbol: $("vn_symbol"),
 
     // token split
     st_token: $("st_token"),
@@ -147,6 +164,7 @@
     st_execute: $("st_execute"),
 
     // native split
+    sn_symbol: $("sn_symbol"),
     sn_amount: $("sn_amount"),
     sn_max: $("sn_max"),
     sn_maxHint: $("sn_maxHint"),
@@ -176,6 +194,7 @@
     vt_execute: $("vt_execute"),
 
     // native vault
+    vn_symbol: $("vn_symbol"),
     vn_executor: $("vn_executor"),
     vn_period: $("vn_period"),
     vn_safe: $("vn_safe"),
@@ -194,6 +213,14 @@
     vn_normalize: $("vn_normalize"),
     vn_execute: $("vn_execute"),
     vn_timerBox: $("vn_timerBox"),
+
+    // my vaults
+    mv_range: $("mv_range"),
+    mv_scan: $("mv_scan"),
+    mv_tokenCount: $("mv_tokenCount"),
+    mv_nativeCount: $("mv_nativeCount"),
+    mv_tokenList: $("mv_tokenList"),
+    mv_nativeList: $("mv_nativeList"),
   };
 
   /***********************
@@ -202,9 +229,9 @@
   let provider = null;
   let signer = null;
   let userAddress = null;
-
   let currentKey = "bsc";
   let activeTab = "split-token";
+  let lastExplorerBase = CONTRACTS.bsc.explorer;
 
   // contracts
   let tokenSplitter = null;
@@ -222,17 +249,22 @@
   let feeBps = 100;
   let feeWallet = null;
 
-  // recipients models per module
+  // recipients models
   let rowsST = [{ account: "", share: "50" }, { account: "", share: "50" }];
   let rowsSN = [{ account: "", share: "50" }, { account: "", share: "50" }];
   let rowsVT = [{ account: "", share: "50" }, { account: "", share: "50" }];
   let rowsVN = [{ account: "", share: "50" }, { account: "", share: "50" }];
 
-  // timers
-  let timerInterval = null;
+  // vault timer intervals
+  let timerIntervalVT = null;
+  let timerIntervalVN = null;
+
+  // radar blips
+  let radarBlips = [];
+  let radarAngle = 0;
 
   /***********************
-   * HELPERS
+   * LOG / UI
    ***********************/
   function log(line) {
     const ts = new Date().toLocaleTimeString();
@@ -241,11 +273,13 @@
   function setStatus(msg) {
     el.teleStatus.textContent = msg;
     log(msg);
+    radarBlip();
   }
   function setError(msg) {
     el.errBox.style.display = msg ? "block" : "none";
     el.errBox.textContent = msg || "";
     if (msg) log(`ERROR: ${msg}`);
+    if (msg) radarBlip(true);
   }
   function shortAddr(a) {
     if (!a || a.length < 10) return a || "—";
@@ -255,9 +289,7 @@
     try { return ethers.utils.isAddress(a); } catch { return false; }
   }
   function checksum(a) { return ethers.utils.getAddress(a); }
-
   function activeCfg() { return CONTRACTS[currentKey]; }
-
   function toBN(n) { return ethers.BigNumber.from(String(n)); }
 
   function clampInt(n, min, max) {
@@ -267,7 +299,6 @@
   }
 
   function nowSec() { return Math.floor(Date.now() / 1000); }
-
   function fmtCountdown(seconds) {
     const s = Math.max(0, Number(seconds) || 0);
     const h = Math.floor(s / 3600);
@@ -277,14 +308,13 @@
     if (m > 0) return `${m}m ${ss}s`;
     return `${ss}s`;
   }
-
   function fmtLocalTimeFromUnix(sec) {
     if (!sec) return "—";
     return new Date(sec * 1000).toLocaleString();
   }
 
   /***********************
-   * SOUND FX
+   * SOUND + RADAR
    ***********************/
   let audioCtx = null;
   function ensureAudio() {
@@ -292,7 +322,7 @@
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     return audioCtx;
   }
-  function beep({ freq = 880, dur = 0.08, type = "sine", gain = 0.12 } = {}) {
+  function beep({ freq = 880, dur = 0.08, type = "sine", gain = 0.10 } = {}) {
     const ctx = ensureAudio();
     if (!ctx) return;
     const o = ctx.createOscillator();
@@ -303,10 +333,10 @@
     o.connect(g); g.connect(ctx.destination);
     o.start(); o.stop(ctx.currentTime + dur);
   }
-  function radarPing() {
-    beep({ freq: 220, dur: 0.05, type: "triangle", gain: 0.10 });
-    setTimeout(() => beep({ freq: 440, dur: 0.06, type: "triangle", gain: 0.10 }), 70);
-    setTimeout(() => beep({ freq: 880, dur: 0.07, type: "triangle", gain: 0.10 }), 150);
+  function pingFx() {
+    beep({ freq: 220, dur: 0.05, type: "triangle", gain: 0.08 });
+    setTimeout(() => beep({ freq: 440, dur: 0.06, type: "triangle", gain: 0.08 }), 70);
+    setTimeout(() => beep({ freq: 880, dur: 0.07, type: "triangle", gain: 0.08 }), 150);
   }
   function coinBeat(count) {
     const n = clampInt(count, 1, 24);
@@ -319,13 +349,97 @@
     }
   }
 
+  function radarBlip(isError = false) {
+    radarBlips.push({
+      t: performance.now(),
+      r: 0.18 + Math.random() * 0.28,
+      a: Math.random() * Math.PI * 2,
+      err: isError,
+    });
+    if (radarBlips.length > 18) radarBlips.shift();
+    if (!isError) pingFx();
+  }
+
+  function drawRadar() {
+    const c = el.radar;
+    if (!c) return;
+    const ctx = c.getContext("2d");
+    const w = c.width, h = c.height;
+    const cx = w / 2, cy = h / 2;
+    const R = Math.min(w, h) * 0.46;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // background glow
+    const grad = ctx.createRadialGradient(cx, cy, 5, cx, cy, R * 1.15);
+    grad.addColorStop(0, "rgba(245,196,77,0.10)");
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    // rings
+    ctx.strokeStyle = "rgba(245,196,77,0.18)";
+    ctx.lineWidth = 1;
+    for (let i = 1; i <= 4; i++) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, (R * i) / 4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // cross lines
+    ctx.strokeStyle = "rgba(255,255,255,0.07)";
+    ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke();
+
+    // sweep
+    radarAngle += 0.015;
+    const a = radarAngle % (Math.PI * 2);
+    const sx = cx + Math.cos(a) * R;
+    const sy = cy + Math.sin(a) * R;
+
+    const sweepGrad = ctx.createLinearGradient(cx, cy, sx, sy);
+    sweepGrad.addColorStop(0, "rgba(245,196,77,0.00)");
+    sweepGrad.addColorStop(1, "rgba(245,196,77,0.25)");
+    ctx.strokeStyle = sweepGrad;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(sx, sy); ctx.stroke();
+
+    // sweep cone
+    ctx.fillStyle = "rgba(245,196,77,0.05)";
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, R, a - 0.35, a);
+    ctx.closePath();
+    ctx.fill();
+
+    // blips
+    const now = performance.now();
+    radarBlips = radarBlips.filter(b => now - b.t < 2200);
+    for (const b of radarBlips) {
+      const age = (now - b.t) / 2200;
+      const alpha = Math.max(0, 1 - age);
+      const rr = R * b.r;
+      const x = cx + Math.cos(b.a) * rr;
+      const y = cy + Math.sin(b.a) * rr;
+      ctx.fillStyle = b.err ? `rgba(255,77,77,${0.55 * alpha})` : `rgba(245,196,77,${0.55 * alpha})`;
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = b.err ? `rgba(255,77,77,${0.35 * alpha})` : `rgba(245,196,77,${0.35 * alpha})`;
+      ctx.beginPath();
+      ctx.arc(x, y, 10, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    requestAnimationFrame(drawRadar);
+  }
+
   /***********************
    * WALLET / NETWORK
    ***********************/
   async function ensureProvider() {
-    if (!window.ethereum) {
-      throw new Error("No wallet provider detected. Install MetaMask and refresh.");
-    }
+    if (!window.ethereum) throw new Error("MetaMask not detected.");
     provider = new ethers.providers.Web3Provider(window.ethereum, "any");
     return provider;
   }
@@ -346,13 +460,13 @@
     el.pillNet.textContent = `THEATER: ${activeCfg().chainName} (chainId ${net.chainId})`;
     el.sn_symbol.textContent = activeCfg().nativeSymbol;
     el.vn_symbol.textContent = activeCfg().nativeSymbol;
+    lastExplorerBase = activeCfg().explorer;
   }
 
   async function switchNetwork() {
     setError("");
     await ensureProvider();
     const cfg = CONTRACTS[el.selChain.value];
-
     try {
       await window.ethereum.request({
         method: "wallet_switchEthereumChain",
@@ -370,8 +484,8 @@
   async function connectWallet() {
     setError("");
     await ensureProvider();
-
     await window.ethereum.request({ method: "eth_requestAccounts" });
+
     signer = provider.getSigner();
     userAddress = await signer.getAddress();
 
@@ -381,13 +495,23 @@
     el.btnConnect.classList.add("connected");
     el.btnConnect.disabled = true;
 
-    radarPing();
+    radarBlip();
     setStatus(`NODE LINKED: ${userAddress}`);
 
     await syncChainFromWallet();
     await initContracts();
     await refreshTelemetry();
     updateGuards();
+  }
+
+  function activeContractForTab() {
+    const cfg = activeCfg();
+    if (activeTab === "split-token") return cfg.tokenSplitter;
+    if (activeTab === "split-native") return cfg.nativeSplitter;
+    if (activeTab === "vault-token") return cfg.tokenVault;
+    if (activeTab === "vault-native") return cfg.nativeVault;
+    if (activeTab === "my-vaults") return "Vault Log Scanner";
+    return "—";
   }
 
   async function initContracts() {
@@ -397,8 +521,7 @@
     tokenVault = new ethers.Contract(cfg.tokenVault, TOKEN_VAULT_ABI, signer || provider);
     nativeVault = new ethers.Contract(cfg.nativeVault, NATIVE_VAULT_ABI, signer || provider);
 
-    // fee policy shown from whichever pane is active, but we keep it consistent:
-    // Token Splitter fee
+    // fee policy: from token splitter (consistent)
     try {
       feeBps = Number(await tokenSplitter.feeBps());
       feeWallet = await tokenSplitter.feeWallet();
@@ -408,7 +531,10 @@
     }
     const feePct = (feeBps / 100).toFixed(2).replace(/\.00$/, "");
     el.st_feeTiny.textContent = `${feePct}%`;
-    el.teleFee.textContent = `${feePct}% → ${feeWallet ? shortAddr(feeWallet) : "feeWallet"}`;
+    el.teleFee.textContent = `${feePct}% → ${feeWallet ? shortAddr(feeWallet) : shortAddr(GLOBAL_FEE_WALLET)}`;
+    el.feeWalletInline.textContent = shortAddr(GLOBAL_FEE_WALLET);
+
+    el.teleActive.textContent = activeContractForTab();
 
     setStatus("CONTRACT ROUTER ONLINE.");
   }
@@ -440,13 +566,13 @@
     const cfg = activeCfg();
     const net = await provider.getNetwork();
     el.pillNet.textContent = `THEATER: ${cfg.chainName} (chainId ${net.chainId})`;
+    el.teleActive.textContent = activeContractForTab();
 
     if (!userAddress) {
       el.teleNative.textContent = "—";
       return;
     }
 
-    // native balance
     try {
       const b = await provider.getBalance(userAddress);
       el.teleNative.textContent = `${ethers.utils.formatEther(b)} ${cfg.nativeSymbol}`;
@@ -454,20 +580,15 @@
       el.teleNative.textContent = "—";
     }
 
-    // active contract shown per tab
-    el.teleActive.textContent = activeContractForTab();
-
-    // token-specific telemetry when token exists
     if (token && tokenAddr) {
       try {
         const tb = await token.balanceOf(userAddress);
         el.teleTokenBal.textContent = `${ethers.utils.formatUnits(tb, tokenDecimals)} ${tokenSymbol}`;
       } catch { el.teleTokenBal.textContent = "—"; }
 
-      // allowance depends on feature:
-      // token split uses spender = tokenSplitter
-      // token vault uses spender = tokenVault
-      let spender = activeTab === "vault-token" ? cfg.tokenVault : cfg.tokenSplitter;
+      let spender;
+      if (activeTab === "vault-token") spender = cfg.tokenVault;
+      else spender = cfg.tokenSplitter;
 
       try {
         const al = await token.allowance(userAddress, spender);
@@ -479,21 +600,11 @@
     updateGuards();
   }
 
-  function activeContractForTab() {
-    const cfg = activeCfg();
-    if (activeTab === "split-token") return cfg.tokenSplitter;
-    if (activeTab === "split-native") return cfg.nativeSplitter;
-    if (activeTab === "vault-token") return cfg.tokenVault;
-    if (activeTab === "vault-native") return cfg.nativeVault;
-    return "—";
-  }
-
   /***********************
-   * RECIPIENT RENDERERS
+   * RECIPIENTS UI
    ***********************/
   function renderRecipients(container, model, vectorEl, onChange) {
     container.innerHTML = "";
-
     model.forEach((r, idx) => {
       const wrap = document.createElement("div");
       wrap.className = "row";
@@ -535,7 +646,6 @@
       wrap.appendChild(btnX);
       container.appendChild(wrap);
     });
-
     updateVector(vectorEl, model);
   }
 
@@ -555,6 +665,7 @@
     for (let i=0;i<model.length;i++) model[i].share = String(Math.max(1, scaled[i]));
     renderRecipients(container, model, vectorEl, onChange);
     setError("");
+    radarBlip();
   }
 
   function validateRecipients(model) {
@@ -577,7 +688,7 @@
   }
 
   /***********************
-   * TOKEN SPLIT (approve + execute)
+   * TOKEN SPLIT
    ***********************/
   async function stApprove() {
     setError("");
@@ -601,7 +712,7 @@
       el.st_approve.disabled = true;
       setStatus(`APPROVING ${tokenSymbol} → Splitter ${shortAddr(cfg.tokenSplitter)}…`);
 
-      // IMPORTANT: spender is the TOKEN SPLITTER (not token, not vault)
+      // spender = tokenSplitter (this is the approval bug that breaks most UIs)
       const tx = await token.approve(cfg.tokenSplitter, amountWei);
       log(`Approve tx: ${tx.hash}`);
       await tx.wait();
@@ -634,7 +745,6 @@
 
     const amountWei = ethers.utils.parseUnits(amt, tokenDecimals);
 
-    // allowance check
     try {
       const allow = await token.allowance(userAddress, cfg.tokenSplitter);
       if (allow.lt(amountWei)) return setError(`Allowance too low. Approve at least ${amt} ${tokenSymbol} first.`);
@@ -642,27 +752,16 @@
 
     try {
       el.st_execute.disabled = true;
-      setStatus("EXECUTE SPLIT…");
+      setStatus("EXECUTE TOKEN SPLIT…");
       coinBeat(vr.accounts.length);
 
-      // static call to catch reverts early
-      await tokenSplitter.callStatic.depositAndDistribute(
-        checksum(taddr),
-        vr.accounts,
-        vr.shares,
-        amountWei
-      );
+      await tokenSplitter.callStatic.depositAndDistribute(checksum(taddr), vr.accounts, vr.shares, amountWei);
 
-      const tx = await tokenSplitter.depositAndDistribute(
-        checksum(taddr),
-        vr.accounts,
-        vr.shares,
-        amountWei
-      );
+      const tx = await tokenSplitter.depositAndDistribute(checksum(taddr), vr.accounts, vr.shares, amountWei);
       log(`Execute tx: ${tx.hash}`);
       await tx.wait();
 
-      setStatus("SPLIT COMPLETE ✅");
+      setStatus("TOKEN SPLIT COMPLETE ✅");
       await refreshTelemetry();
     } catch (e) {
       const msg = e?.error?.message || e?.data?.message || e?.reason || e?.message || "Execute failed.";
@@ -683,8 +782,7 @@
     }
     const afterFee = num * (1 - feeBps / 10000);
     el.st_usd.textContent = `~${raw} ${tokenSymbol}`;
-    el.st_postFee.textContent =
-      `Post-fee delivery ~ ${afterFee.toFixed(6).replace(/0+$/,"").replace(/\.$/,"")} ${tokenSymbol}`;
+    el.st_postFee.textContent = `Post-fee ~ ${afterFee.toFixed(6).replace(/0+$/,"").replace(/\.$/,"")} ${tokenSymbol}`;
   }
 
   /***********************
@@ -711,7 +809,6 @@
   async function snExecute() {
     setError("");
     if (!signer || !userAddress) return setError("LINK NODE first.");
-    const cfg = activeCfg();
 
     const amt = (el.sn_amount.value || "").trim();
     const num = Number(amt);
@@ -744,7 +841,7 @@
   }
 
   /***********************
-   * TOKEN VAULT (approve + create + timer + execute)
+   * TOKEN VAULT
    ***********************/
   async function vtApprove() {
     setError("");
@@ -768,7 +865,7 @@
       el.vt_approve.disabled = true;
       setStatus(`APPROVING ${tokenSymbol} → Vault ${shortAddr(cfg.tokenVault)}…`);
 
-      // IMPORTANT: spender is TOKEN VAULT here
+      // spender = tokenVault
       const tx = await token.approve(cfg.tokenVault, amountWei);
       log(`Vault approve tx: ${tx.hash}`);
       await tx.wait();
@@ -808,7 +905,6 @@
 
     const amountWei = ethers.utils.parseUnits(amt, tokenDecimals);
 
-    // allowance check
     try {
       const allow = await token.allowance(userAddress, cfg.tokenVault);
       if (allow.lt(amountWei)) return setError(`Allowance too low. Approve vault for ${amt} ${tokenSymbol} first.`);
@@ -818,21 +914,27 @@
       el.vt_create.disabled = true;
       setStatus("CREATING TOKEN VAULT…");
 
-      const tx = await tokenVault.createVault(
-        checksum(taddr),
-        amountWei,
-        vr.accounts,
-        vr.shares,
-        period,
-        safe
-      );
+      const tx = await tokenVault.createVault(checksum(taddr), amountWei, vr.accounts, vr.shares, period, safe);
       log(`Create vault tx: ${tx.hash}`);
+
       const receipt = await tx.wait();
+      // parse VaultCreated for vaultId
+      let createdId = null;
+      for (const ev of (receipt.events || [])) {
+        if (ev.event === "VaultCreated" && ev.args && ev.args.vaultId != null) {
+          createdId = ev.args.vaultId.toString();
+          break;
+        }
+      }
 
-      setStatus("TOKEN VAULT CREATED ✅");
+      if (createdId != null) {
+        el.vt_vaultId.value = createdId;
+        setStatus(`TOKEN VAULT CREATED ✅ (Vault #${createdId})`);
+        await vtLoad();
+      } else {
+        setStatus("TOKEN VAULT CREATED ✅ (Enter Vault ID then LOAD)");
+      }
 
-      // user can copy/paste vault id from events later; for now we just tell them to load by id
-      el.vt_timerBox.textContent = "Vault created. Enter Vault ID and press LOAD.";
       await refreshTelemetry();
     } catch (e) {
       const msg = e?.error?.message || e?.data?.message || e?.reason || e?.message || "Create vault failed.";
@@ -843,17 +945,40 @@
     }
   }
 
+  function stopVTTimer() { if (timerIntervalVT) clearInterval(timerIntervalVT); timerIntervalVT = null; }
+
   async function vtLoad() {
     setError("");
     if (!provider) return setError("LINK NODE first.");
     const id = clampInt(el.vt_vaultId.value || "0", 0, 10_000_000);
     try {
       const v = await tokenVault.getVault(id);
-      startVaultTimer("token", id, v.heartbeat, v.inactivityPeriod, v.executed, v.frozen);
+      startTokenVaultTimer(id, v.heartbeat, v.inactivityPeriod, v.executed, v.frozen);
       setStatus(`TOKEN VAULT LOADED: #${id}`);
     } catch (e) {
       setError(e?.message || "Failed to load vault.");
     }
+  }
+
+  function startTokenVaultTimer(vaultId, heartbeat, inactivity, executed, frozen) {
+    stopVTTimer();
+    const paint = () => {
+      const hb = Number(heartbeat);
+      const per = Number(inactivity);
+      const unlockAt = hb + per;
+      const now = nowSec();
+      const remaining = unlockAt - now;
+      const unlocked = remaining <= 0;
+
+      const header = `Vault #${vaultId} • TOKEN • ${frozen ? "FROZEN" : "ACTIVE"} • ${executed ? "EXECUTED" : (unlocked ? "UNLOCKED" : "LOCKED")}`;
+      const line1 = `Last heartbeat: ${fmtLocalTimeFromUnix(hb)} (unix ${hb})`;
+      const line2 = `Unlock time: ${fmtLocalTimeFromUnix(unlockAt)} (unix ${unlockAt})`;
+      const line3 = executed ? `Status: executed` : (unlocked ? `Unlocked: YES` : `Countdown: ${fmtCountdown(remaining)}`);
+
+      el.vt_timerBox.textContent = `${header}\n${line1}\n${line2}\n${line3}`;
+    };
+    paint();
+    timerIntervalVT = setInterval(paint, 1000);
   }
 
   async function vtPing() {
@@ -904,13 +1029,15 @@
       await vtLoad();
       await refreshTelemetry();
     } catch (e) {
-      setError(e?.error?.message || e?.data?.message || e?.reason || e?.message || "ExecuteInheritance failed.");
+      setError(e?.error?.message || e?.data?.message || e?.reason || e?.message || "Execute failed.");
     }
   }
 
   /***********************
-   * NATIVE VAULT (create/deposit/execute + timer)
+   * NATIVE VAULT
    ***********************/
+  function stopVNTimer() { if (timerIntervalVN) clearInterval(timerIntervalVN); timerIntervalVN = null; }
+
   async function vnCreate() {
     setError("");
     if (!signer || !userAddress) return setError("LINK NODE first.");
@@ -930,12 +1057,25 @@
 
       const tx = await nativeVault.createVault(checksum(execRaw), period, checksum(safeRaw));
       log(`Create native vault tx: ${tx.hash}`);
-      await tx.wait();
+      const receipt = await tx.wait();
 
-      setStatus("NATIVE VAULT CREATED ✅");
-      el.vn_timerBox.textContent = "Vault created. Enter Vault ID and press LOAD.";
+      let createdId = null;
+      for (const ev of (receipt.events || [])) {
+        if (ev.event === "VaultCreated" && ev.args && ev.args.vaultId != null) {
+          createdId = ev.args.vaultId.toString();
+          break;
+        }
+      }
+
+      if (createdId != null) {
+        el.vn_vaultId.value = createdId;
+        setStatus(`NATIVE VAULT CREATED ✅ (Vault #${createdId})`);
+        await vnLoad();
+      } else {
+        setStatus("NATIVE VAULT CREATED ✅ (Enter Vault ID then LOAD)");
+      }
     } catch (e) {
-      setError(e?.error?.message || e?.data?.message || e?.reason || e?.message || "Create native vault failed.");
+      setError(e?.error?.message || e?.data?.message || e?.reason || e?.message || "Create failed.");
     } finally {
       el.vn_create.disabled = false;
     }
@@ -947,27 +1087,54 @@
     const id = clampInt(el.vn_vaultId.value || "0", 0, 10_000_000);
     try {
       const v = await nativeVault.getVault(id);
-      startVaultTimer("native", id, v.heartbeat, v.inactivityPeriod, v.executed, v.frozen, v.executor);
+      startNativeVaultTimer(id, v.heartbeat, v.inactivityPeriod, v.executed, v.frozen, v.executor, v.balance);
       setStatus(`NATIVE VAULT LOADED: #${id}`);
     } catch (e) {
       setError(e?.message || "Failed to load native vault.");
     }
   }
 
+  function startNativeVaultTimer(vaultId, heartbeat, inactivity, executed, frozen, executorAddr, balanceWei) {
+    stopVNTimer();
+    const paint = () => {
+      const hb = Number(heartbeat);
+      const per = Number(inactivity);
+      const unlockAt = hb + per;
+      const now = nowSec();
+      const remaining = unlockAt - now;
+      const unlocked = remaining <= 0;
+
+      const header = `Vault #${vaultId} • NATIVE • ${frozen ? "FROZEN" : "ACTIVE"} • ${executed ? "EXECUTED" : (unlocked ? "UNLOCKED" : "LOCKED")}`;
+      const line1 = `Last heartbeat: ${fmtLocalTimeFromUnix(hb)} (unix ${hb})`;
+      const line2 = `Unlock time: ${fmtLocalTimeFromUnix(unlockAt)} (unix ${unlockAt})`;
+      const line3 = executed ? `Status: executed` : (unlocked ? `Unlocked: YES` : `Countdown: ${fmtCountdown(remaining)}`);
+      const line4 = `Executor: ${shortAddr(executorAddr)}`;
+      const line5 = `Balance: ${ethers.utils.formatEther(balanceWei || 0)} ${activeCfg().nativeSymbol}`;
+
+      el.vn_timerBox.textContent = `${header}\n${line1}\n${line2}\n${line3}\n${line4}\n${line5}`;
+    };
+    paint();
+    timerIntervalVN = setInterval(paint, 1000);
+  }
+
   async function vnDeposit() {
     setError("");
     if (!signer) return setError("LINK NODE first.");
     const id = clampInt(el.vn_vaultId.value || "0", 0, 10_000_000);
+
     const amt = (el.vn_depositAmt.value || "").trim();
     const num = Number(amt);
     if (!amt || !Number.isFinite(num) || num <= 0) return setError("Enter a valid deposit amount.");
     const valueWei = ethers.utils.parseEther(amt);
+
     try {
       el.vn_deposit.disabled = true;
       setStatus("DEPOSITING…");
+
       const tx = await nativeVault.deposit(id, { value: valueWei });
       log(`Deposit tx: ${tx.hash}`);
       await tx.wait();
+
       setStatus("DEPOSIT CONFIRMED ✅");
       await vnLoad();
       await refreshTelemetry();
@@ -1026,7 +1193,7 @@
       await vnLoad();
       await refreshTelemetry();
     } catch (e) {
-      setError(e?.error?.message || e?.data?.message || e?.reason || e?.message || "Emergency move failed.");
+      setError(e?.error?.message || e?.data?.message || e?.reason || e?.message || "Emergency failed.");
     }
   }
 
@@ -1051,51 +1218,167 @@
       await vnLoad();
       await refreshTelemetry();
     } catch (e) {
-      setError(e?.error?.message || e?.data?.message || e?.reason || e?.message || "Vault execute failed.");
+      setError(e?.error?.message || e?.data?.message || e?.reason || e?.message || "Execute failed.");
     } finally {
       el.vn_execute.disabled = false;
     }
   }
 
   /***********************
-   * VAULT TIMER ENGINE
+   * MY VAULTS (AUTO DISCOVERY)
    ***********************/
-  function stopTimer() {
-    if (timerInterval) clearInterval(timerInterval);
-    timerInterval = null;
+  function cacheKey(kind) {
+    return `citadel_v2_${currentKey}_${userAddress || "0x0"}_${kind}`;
   }
 
-  function startVaultTimer(kind, vaultId, heartbeat, inactivity, executed, frozen, executorAddr) {
-    stopTimer();
-
-    function paint() {
-      const hb = Number(heartbeat);
-      const per = Number(inactivity);
-      const unlockAt = hb + per;
-      const now = nowSec();
-      const remaining = unlockAt - now;
-
-      const unlocked = remaining <= 0;
-
-      const header = `Vault #${vaultId} • ${kind.toUpperCase()} • ${frozen ? "FROZEN" : "ACTIVE"} • ${executed ? "EXECUTED" : (unlocked ? "UNLOCKED" : "LOCKED")}`;
-      const line1 = `Last heartbeat: ${fmtLocalTimeFromUnix(hb)} (unix ${hb})`;
-      const line2 = `Unlock time: ${fmtLocalTimeFromUnix(unlockAt)} (unix ${unlockAt})`;
-      const line3 = executed ? `Status: executed` : (unlocked ? `Unlocked: YES` : `Countdown: ${fmtCountdown(remaining)}`);
-
-      const extra = executorAddr ? `Executor: ${shortAddr(executorAddr)}` : "";
-
-      const text = `${header}\n${line1}\n${line2}\n${line3}${extra ? `\n${extra}` : ""}`;
-
-      if (kind === "token") el.vt_timerBox.textContent = text;
-      else el.vn_timerBox.textContent = text;
+  function renderVaultList(container, ids, kind) {
+    container.innerHTML = "";
+    if (!ids.length) {
+      const empty = document.createElement("div");
+      empty.className = "vaultCard";
+      empty.innerHTML = `<div class="vaultMeta">No ${kind} vaults found in scan range.</div>`;
+      container.appendChild(empty);
+      return;
     }
 
-    paint();
-    timerInterval = setInterval(paint, 1000);
+    ids.forEach((id) => {
+      const card = document.createElement("div");
+      card.className = "vaultCard";
+
+      const top = document.createElement("div");
+      top.className = "vaultCardTop";
+      top.innerHTML = `<h4>${kind.toUpperCase()} Vault #${id}</h4><span class="pill mini mono">${activeCfg().chainName}</span>`;
+
+      const meta = document.createElement("div");
+      meta.className = "vaultMeta";
+      meta.textContent = "Tap LOAD to open timer/actions.";
+
+      const actions = document.createElement("div");
+      actions.className = "vaultActions";
+
+      const btnLoad = document.createElement("button");
+      btnLoad.className = "btn gold";
+      btnLoad.textContent = "LOAD";
+      btnLoad.onclick = async () => {
+        if (kind === "token") {
+          el.vt_vaultId.value = String(id);
+          setTab("vault-token");
+          await vtLoad();
+        } else {
+          el.vn_vaultId.value = String(id);
+          setTab("vault-native");
+          await vnLoad();
+        }
+        radarBlip();
+      };
+
+      actions.appendChild(btnLoad);
+      card.appendChild(top);
+      card.appendChild(meta);
+      card.appendChild(actions);
+      container.appendChild(card);
+    });
+  }
+
+  async function scanVaults() {
+    setError("");
+    if (!provider || !userAddress) return setError("LINK NODE first.");
+
+    const range = clampInt(el.mv_range.value || "200000", 1000, 5_000_000);
+
+    try {
+      el.mv_scan.disabled = true;
+      setStatus(`SCANNING VAULT LOGS (last ${range} blocks)…`);
+
+      const latest = await provider.getBlockNumber();
+      const fromBlock = Math.max(0, latest - range);
+
+      // TOKEN VAULT scan
+      const tokenIface = new ethers.utils.Interface(TOKEN_VAULT_ABI);
+      const tokenTopic = tokenIface.getEventTopic("VaultCreated");
+
+      const tokenLogs = await provider.getLogs({
+        address: activeCfg().tokenVault,
+        fromBlock,
+        toBlock: latest,
+        topics: [tokenTopic, ethers.utils.hexZeroPad(userAddress, 32)],
+      });
+
+      const tokenIds = [];
+      for (const l of tokenLogs) {
+        try {
+          const p = tokenIface.parseLog(l);
+          tokenIds.push(p.args.vaultId.toString());
+        } catch {}
+      }
+
+      // NATIVE VAULT scan
+      const nativeIface = new ethers.utils.Interface(NATIVE_VAULT_ABI);
+      const nativeTopic = nativeIface.getEventTopic("VaultCreated");
+
+      const nativeLogs = await provider.getLogs({
+        address: activeCfg().nativeVault,
+        fromBlock,
+        toBlock: latest,
+        topics: [nativeTopic, ethers.utils.hexZeroPad(userAddress, 32)],
+      });
+
+      const nativeIds = [];
+      for (const l of nativeLogs) {
+        try {
+          const p = nativeIface.parseLog(l);
+          nativeIds.push(p.args.vaultId.toString());
+        } catch {}
+      }
+
+      // de-dupe & sort numeric
+      const uniqSort = (arr) => Array.from(new Set(arr)).sort((a,b)=>Number(a)-Number(b));
+      const tok = uniqSort(tokenIds);
+      const nat = uniqSort(nativeIds);
+
+      // cache
+      localStorage.setItem(cacheKey("tokenVaultIds"), JSON.stringify({ at: Date.now(), fromBlock, latest, ids: tok }));
+      localStorage.setItem(cacheKey("nativeVaultIds"), JSON.stringify({ at: Date.now(), fromBlock, latest, ids: nat }));
+
+      el.mv_tokenCount.textContent = `${tok.length} found`;
+      el.mv_nativeCount.textContent = `${nat.length} found`;
+      renderVaultList(el.mv_tokenList, tok, "token");
+      renderVaultList(el.mv_nativeList, nat, "native");
+
+      setStatus("SCAN COMPLETE ✅");
+    } catch (e) {
+      setError(e?.message || "Scan failed.");
+    } finally {
+      el.mv_scan.disabled = false;
+    }
+  }
+
+  function loadCachedVaultsIfAny() {
+    try {
+      const tok = JSON.parse(localStorage.getItem(cacheKey("tokenVaultIds")) || "null");
+      const nat = JSON.parse(localStorage.getItem(cacheKey("nativeVaultIds")) || "null");
+      if (tok?.ids) {
+        el.mv_tokenCount.textContent = `${tok.ids.length} cached`;
+        renderVaultList(el.mv_tokenList, tok.ids, "token");
+      } else {
+        el.mv_tokenCount.textContent = "—";
+        el.mv_tokenList.innerHTML = "";
+      }
+      if (nat?.ids) {
+        el.mv_nativeCount.textContent = `${nat.ids.length} cached`;
+        renderVaultList(el.mv_nativeList, nat.ids, "native");
+      } else {
+        el.mv_nativeCount.textContent = "—";
+        el.mv_nativeList.innerHTML = "";
+      }
+    } catch {
+      el.mv_tokenCount.textContent = "—";
+      el.mv_nativeCount.textContent = "—";
+    }
   }
 
   /***********************
-   * UI TABS / OPERATOR MODE
+   * TABS
    ***********************/
   function setTab(tabKey) {
     activeTab = tabKey;
@@ -1104,38 +1387,33 @@
       el.panes[k].style.display = (k === tabKey) ? "block" : "none";
     }
     el.tabs.forEach(t => t.classList.toggle("active", t.dataset.tab === tabKey));
-
     el.teleActive.textContent = activeContractForTab();
-    setStatus(`TAB: ${tabKey.toUpperCase()}`);
-    setError("");
-    updateGuards();
-    refreshTelemetry().catch(()=>{});
-  }
 
-  function applyOperatorMode() {
-    const op = !!el.chkOperator.checked;
-    // In simple mode, we keep the right card visible but still clean.
-    // Operator mode just means we allow more buttons & telemetry info stays.
-    // (If you later want to hide the entire right panel in simple mode, I can do that too.)
-    setStatus(op ? "OPERATOR CONSOLE: ON" : "SIMPLE MODE: ON");
+    if (tabKey === "split-token") { el.paneTitle.textContent = "TOKEN SPLIT"; }
+    if (tabKey === "split-native") { el.paneTitle.textContent = "NATIVE SPLIT"; }
+    if (tabKey === "vault-token") { el.paneTitle.textContent = "TOKEN VAULT"; }
+    if (tabKey === "vault-native") { el.paneTitle.textContent = "NATIVE VAULT"; }
+    if (tabKey === "my-vaults") { el.paneTitle.textContent = "MY VAULTS"; }
+
+    setError("");
+    setStatus(`TAB: ${tabKey.toUpperCase()}`);
+    refreshTelemetry().catch(()=>{});
+    if (tabKey === "my-vaults") loadCachedVaultsIfAny();
   }
 
   /***********************
-   * GUARDS (prevents broken approve/execute)
+   * GUARDS
    ***********************/
   function updateGuards() {
     const connected = !!signer && !!userAddress;
 
-    // chain switch & connect
     el.btnSwitch.disabled = !provider;
-    // token split
+
     el.st_approve.disabled = !connected;
     el.st_execute.disabled = !connected;
 
-    // native split
     el.sn_execute.disabled = !connected;
 
-    // token vault
     el.vt_approve.disabled = !connected;
     el.vt_create.disabled = !connected;
     el.vt_ping.disabled = !connected;
@@ -1143,7 +1421,6 @@
     el.vt_unfreeze.disabled = !connected;
     el.vt_execute.disabled = !connected;
 
-    // native vault
     el.vn_create.disabled = !connected;
     el.vn_deposit.disabled = !connected;
     el.vn_ping.disabled = !connected;
@@ -1151,6 +1428,15 @@
     el.vn_unfreeze.disabled = !connected;
     el.vn_emergency.disabled = !connected;
     el.vn_execute.disabled = !connected;
+
+    el.mv_scan.disabled = !connected;
+  }
+
+  /***********************
+   * EXPLORER BUTTON
+   ***********************/
+  function openExplorer() {
+    window.open(lastExplorerBase, "_blank", "noopener,noreferrer");
   }
 
   /***********************
@@ -1165,30 +1451,28 @@
     el.btnSwitch.addEventListener("click", switchNetwork);
     el.selChain.addEventListener("change", () => { if (provider) switchNetwork(); });
 
-    // operator mode
-    el.chkOperator.addEventListener("change", applyOperatorMode);
-
-    // refresh/log clear
+    // telemetry
     el.btnRefresh.addEventListener("click", refreshTelemetry);
     el.btnClear.addEventListener("click", () => { el.log.textContent = ""; setError(""); setStatus("Log cleared."); });
+    el.btnViewExplorer.addEventListener("click", openExplorer);
 
-    // token load triggers
+    // token loads
     el.st_token.addEventListener("input", async () => { const v=el.st_token.value.trim(); if (isAddr(v)) await loadToken(v); refreshTelemetry(); });
     el.vt_token.addEventListener("input", async () => { const v=el.vt_token.value.trim(); if (isAddr(v)) await loadToken(v); refreshTelemetry(); });
 
-    el.st_amount.addEventListener("input", () => updateSplitTokenEstimate());
+    el.st_amount.addEventListener("input", updateSplitTokenEstimate);
 
-    // recipients UI init
+    // recipients init
     renderRecipients(el.st_recipients, rowsST, el.st_vector, updateGuards);
     renderRecipients(el.sn_recipients, rowsSN, el.sn_vector, updateGuards);
     renderRecipients(el.vt_recipients, rowsVT, el.vt_vector, updateGuards);
     renderRecipients(el.vn_recipients, rowsVN, el.vn_vector, updateGuards);
 
     // add buttons
-    el.st_add.addEventListener("click", () => { rowsST.push({account:"",share:"10"}); renderRecipients(el.st_recipients, rowsST, el.st_vector, updateGuards); });
-    el.sn_add.addEventListener("click", () => { rowsSN.push({account:"",share:"10"}); renderRecipients(el.sn_recipients, rowsSN, el.sn_vector, updateGuards); });
-    el.vt_add.addEventListener("click", () => { rowsVT.push({account:"",share:"10"}); renderRecipients(el.vt_recipients, rowsVT, el.vt_vector, updateGuards); });
-    el.vn_add.addEventListener("click", () => { rowsVN.push({account:"",share:"10"}); renderRecipients(el.vn_recipients, rowsVN, el.vn_vector, updateGuards); });
+    el.st_add.addEventListener("click", () => { rowsST.push({account:"",share:"10"}); renderRecipients(el.st_recipients, rowsST, el.st_vector, updateGuards); radarBlip(); });
+    el.sn_add.addEventListener("click", () => { rowsSN.push({account:"",share:"10"}); renderRecipients(el.sn_recipients, rowsSN, el.sn_vector, updateGuards); radarBlip(); });
+    el.vt_add.addEventListener("click", () => { rowsVT.push({account:"",share:"10"}); renderRecipients(el.vt_recipients, rowsVT, el.vt_vector, updateGuards); radarBlip(); });
+    el.vn_add.addEventListener("click", () => { rowsVN.push({account:"",share:"10"}); renderRecipients(el.vn_recipients, rowsVN, el.vn_vector, updateGuards); radarBlip(); });
 
     // normalize
     el.st_normalize.addEventListener("click", () => normalizeModel(rowsST, el.st_recipients, el.st_vector, updateGuards));
@@ -1200,11 +1484,11 @@
     el.st_approve.addEventListener("click", stApprove);
     el.st_execute.addEventListener("click", stExecute);
 
-    // native split actions
+    // native split
     el.sn_max.addEventListener("click", snMaxGasSafe);
     el.sn_execute.addEventListener("click", snExecute);
 
-    // token vault actions
+    // token vault
     el.vt_approve.addEventListener("click", vtApprove);
     el.vt_create.addEventListener("click", vtCreate);
     el.vt_load.addEventListener("click", vtLoad);
@@ -1213,7 +1497,7 @@
     el.vt_unfreeze.addEventListener("click", vtUnfreeze);
     el.vt_execute.addEventListener("click", vtExecuteInheritance);
 
-    // native vault actions
+    // native vault
     el.vn_create.addEventListener("click", vnCreate);
     el.vn_load.addEventListener("click", vnLoad);
     el.vn_deposit.addEventListener("click", vnDeposit);
@@ -1222,6 +1506,9 @@
     el.vn_unfreeze.addEventListener("click", vnUnfreeze);
     el.vn_emergency.addEventListener("click", vnEmergency);
     el.vn_execute.addEventListener("click", vnExecute);
+
+    // my vaults
+    el.mv_scan.addEventListener("click", scanVaults);
 
     // metamask events
     if (window.ethereum) {
@@ -1234,7 +1521,6 @@
           el.btnConnect.classList.remove("connected");
           el.btnConnect.classList.add("gold");
           el.btnConnect.disabled = false;
-          stopTimer();
           setStatus("NODE DISCONNECTED.");
           updateGuards();
           return;
@@ -1243,6 +1529,7 @@
         el.pillWallet.textContent = `NODE: ${shortAddr(userAddress)}`;
         setStatus(`NODE CHANGED: ${userAddress}`);
         await refreshTelemetry();
+        if (activeTab === "my-vaults") loadCachedVaultsIfAny();
       });
 
       window.ethereum.on("chainChanged", async () => {
@@ -1253,6 +1540,7 @@
           await initContracts();
           await refreshTelemetry();
           setStatus("THEATER CHANGED.");
+          if (activeTab === "my-vaults") loadCachedVaultsIfAny();
         } catch (e) {
           setError(e?.message || "Chain change error.");
         }
@@ -1265,13 +1553,19 @@
    ***********************/
   async function boot() {
     try {
+      el.feeWalletInline.textContent = shortAddr(GLOBAL_FEE_WALLET);
+      el.mv_range.value = "200000";
+
       bindEvents();
       setTab("split-token");
-      applyOperatorMode();
       updateGuards();
-      setStatus("CITADEL ONLINE. LINK NODE to begin.");
+      setStatus("CITADEL v2 ONLINE. LINK NODE to begin.");
+      radarBlip();
 
-      // silent connect if already authorized
+      // start radar loop
+      drawRadar();
+
+      // silent connect
       if (window.ethereum) {
         await ensureProvider();
         const accs = await window.ethereum.request({ method: "eth_accounts" });
@@ -1289,6 +1583,12 @@
           await initContracts();
           await refreshTelemetry();
           setStatus("AUTO-LINKED ✅");
+          updateGuards();
+        } else {
+          // show default chain name even before connect
+          el.pillNet.textContent = `THEATER: ${activeCfg().chainName}`;
+          el.sn_symbol.textContent = activeCfg().nativeSymbol;
+          el.vn_symbol.textContent = activeCfg().nativeSymbol;
         }
       }
     } catch (e) {
