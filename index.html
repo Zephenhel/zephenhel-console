@@ -2,368 +2,381 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ZEPHENHEL CITADEL</title>
-
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>ZEPHENHEL CITADEL v2</title>
   <link rel="stylesheet" href="./styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
 </head>
 <body>
-
-<header class="topbar">
-  <div class="topbar-inner">
-    <div class="brand">
-      <div class="brand-badge">Z</div>
-      <div class="brand-text">
-        <h1>ZEPHENHEL CITADEL</h1>
-        <p>Tri-Chain Split + Inheritance • BSC • Ethereum • Polygon</p>
-      </div>
-    </div>
-
-    <div class="pills">
-      <div class="pill net" id="pillNet">THEATER: —</div>
-      <div class="pill wallet" id="pillWallet">NODE: DISCONNECTED</div>
-
-      <button class="btn ghost" id="btnSwitch" title="Switch network">SWITCH</button>
-      <button class="btn gold" id="btnConnect">LINK NODE</button>
-    </div>
-  </div>
-</header>
-
-<main class="container">
-  <div class="warframe">
-    <div class="scanlines"></div>
-    <div class="gridlines"></div>
-    <div class="gloworb a"></div>
-    <div class="gloworb b"></div>
-
-    <div class="panelTop">
-      <div class="tabs" role="tablist">
-        <button class="tab active" data-tab="split-token">TOKEN SPLIT</button>
-        <button class="tab" data-tab="split-native">NATIVE SPLIT</button>
-        <button class="tab" data-tab="vault-token">TOKEN VAULT</button>
-        <button class="tab" data-tab="vault-native">NATIVE VAULT</button>
-      </div>
-
-      <div class="rightControls">
-        <label class="toggle">
-          <input type="checkbox" id="chkOperator">
-          <span>Operator Console</span>
-        </label>
-        <label class="toggle">
-          <input type="checkbox" id="chkSound" checked>
-          <span>Sound FX</span>
-        </label>
-      </div>
-    </div>
-
-    <div class="grid">
-      <!-- LEFT: COMMAND -->
-      <section class="card">
-        <div class="card-title">
-          <h2 id="titleLeft">CITADEL COMMAND</h2>
-          <div class="badge" id="badgeLeft">READY</div>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-badge">Z</div>
+        <div class="brand-text">
+          <h1>ZEPHENHEL CITADEL <span class="muted">v2</span></h1>
+          <p>Unified Console • Token + Native • Vaults + Splitters • BSC • Ethereum • Polygon</p>
         </div>
+      </div>
 
-        <div class="label">THEATER (CHAIN)</div>
-        <select id="selChain">
+      <div class="pills">
+        <div class="pill net" id="pillNet">THEATER: —</div>
+        <div class="pill wallet" id="pillWallet">NODE: DISCONNECTED</div>
+
+        <select class="select mini" id="selChain" title="Select chain">
           <option value="bsc">BNB CHAIN</option>
           <option value="ethereum">ETHEREUM</option>
           <option value="polygon">POLYGON</option>
         </select>
 
-        <div class="hr"></div>
-
-        <!-- ====== TAB: TOKEN SPLIT ====== -->
-        <div class="tabPane" id="pane-split-token">
-          <div class="label">ASSET CONTRACT (ERC20 / BEP20)</div>
-          <input id="st_token" placeholder="0xToken…" spellcheck="false" />
-
-          <div class="row2">
-            <div>
-              <div class="label">AMOUNT</div>
-              <input id="st_amount" placeholder="0.0" inputmode="decimal" />
-              <div class="small">
-                Token split uses <b>Approve</b> → <b>Execute</b>. Fee happens inside splitter.
-              </div>
-            </div>
-            <div class="miniCard">
-              <div class="miniTitle">ESTIMATE</div>
-              <div class="miniValue" id="st_usd">—</div>
-              <div class="miniSub" id="st_postFee">Post-fee delivery —</div>
-              <div class="miniSub2">Platform fee: <span class="feeTiny" id="st_feeTiny">—</span></div>
-            </div>
-          </div>
-
-          <div class="hr"></div>
-
-          <div class="card-title" style="margin-bottom:6px;">
-            <h2>TARGET MATRIX</h2>
-            <div class="inlineBtns">
-              <div class="pill" id="st_vector">VECTOR: —</div>
-              <button class="btn ghost" id="st_add">+ ADD TARGET</button>
-            </div>
-          </div>
-
-          <div class="small" style="margin-bottom:8px;">
-            Shares are weights (50/50, 70/20/10). Normalize sets total to 100.
-          </div>
-
-          <div id="st_recipients"></div>
-
-          <div class="btnRow">
-            <button class="btn ghost" id="st_normalize">NORMALIZE</button>
-            <button class="btn ghost" id="st_approve">APPROVE</button>
-            <button class="btn gold" id="st_execute">EXECUTE SPLIT</button>
-          </div>
-
-          <div class="notice">
-            ⚠️ Recipients must view the same chain (BSC token ≠ Ethereum token).
-          </div>
-        </div>
-
-        <!-- ====== TAB: NATIVE SPLIT ====== -->
-        <div class="tabPane" id="pane-split-native" style="display:none;">
-          <div class="label">NATIVE AMOUNT (<span id="sn_symbol">—</span>)</div>
-          <div class="row2">
-            <div>
-              <input id="sn_amount" placeholder="0.0" inputmode="decimal" />
-              <div class="small">
-                Native split is <b>one transaction</b>. Fee happens inside native splitter.
-              </div>
-            </div>
-            <div class="miniCard">
-              <div class="miniTitle">GAS-SAFE MAX</div>
-              <div class="miniValue" id="sn_maxHint">Tap MAX</div>
-              <div class="miniSub">Reserves gas automatically.</div>
-            </div>
-          </div>
-
-          <div class="btnRow">
-            <button class="btn ghost" id="sn_max">MAX (GAS-SAFE)</button>
-          </div>
-
-          <div class="hr"></div>
-
-          <div class="card-title" style="margin-bottom:6px;">
-            <h2>TARGET MATRIX</h2>
-            <div class="inlineBtns">
-              <div class="pill" id="sn_vector">VECTOR: —</div>
-              <button class="btn ghost" id="sn_add">+ ADD TARGET</button>
-            </div>
-          </div>
-
-          <div class="small" style="margin-bottom:8px;">
-            Shares are weights. Normalize sets total to 100.
-          </div>
-
-          <div id="sn_recipients"></div>
-
-          <div class="btnRow">
-            <button class="btn ghost" id="sn_normalize">NORMALIZE</button>
-            <button class="btn gold" id="sn_execute">EXECUTE NATIVE SPLIT</button>
-          </div>
-
-          <div class="notice">
-            Native split sends <b>BNB/ETH/MATIC</b> directly to targets.
-          </div>
-        </div>
-
-        <!-- ====== TAB: TOKEN VAULT ====== -->
-        <div class="tabPane" id="pane-vault-token" style="display:none;">
-          <div class="label">ASSET CONTRACT (ERC20 / BEP20)</div>
-          <input id="vt_token" placeholder="0xToken…" spellcheck="false" />
-
-          <div class="row2">
-            <div>
-              <div class="label">LOCK AMOUNT</div>
-              <input id="vt_amount" placeholder="0.0" inputmode="decimal" />
-              <div class="small">Vault will pull tokens from your wallet (Approve → Create Vault).</div>
-            </div>
-            <div class="miniCard">
-              <div class="miniTitle">INACTIVITY</div>
-              <div class="miniValue">
-                <input id="vt_period" placeholder="3600" inputmode="numeric" style="margin-top:6px;">
-              </div>
-              <div class="miniSub">Seconds (e.g. 120 = 2 minutes)</div>
-            </div>
-          </div>
-
-          <div class="label">SAFE WALLET (optional)</div>
-          <input id="vt_safe" placeholder="0xSafeWallet (or leave blank)" spellcheck="false" />
-
-          <div class="hr"></div>
-
-          <div class="card-title" style="margin-bottom:6px;">
-            <h2>RECIPIENTS</h2>
-            <div class="inlineBtns">
-              <div class="pill" id="vt_vector">VECTOR: —</div>
-              <button class="btn ghost" id="vt_add">+ ADD</button>
-            </div>
-          </div>
-
-          <div id="vt_recipients"></div>
-
-          <div class="btnRow">
-            <button class="btn ghost" id="vt_normalize">NORMALIZE</button>
-            <button class="btn ghost" id="vt_approve">APPROVE VAULT</button>
-            <button class="btn gold" id="vt_create">CREATE VAULT</button>
-          </div>
-
-          <div class="hr"></div>
-
-          <div class="label">MY VAULT ID</div>
-          <div class="row2">
-            <div>
-              <input id="vt_vaultId" placeholder="e.g. 0" inputmode="numeric" />
-              <div class="small">Use “Load” to display timer + details.</div>
-            </div>
-            <div class="btnRow" style="margin:0;">
-              <button class="btn ghost" id="vt_load">LOAD</button>
-            </div>
-          </div>
-
-          <div class="notice" id="vt_timerBox">Timer: —</div>
-
-          <div class="btnRow">
-            <button class="btn ghost" id="vt_ping">PING</button>
-            <button class="btn ghost" id="vt_freeze">FREEZE</button>
-            <button class="btn ghost" id="vt_unfreeze">UNFREEZE</button>
-            <button class="btn gold" id="vt_execute">EXECUTE INHERITANCE</button>
-          </div>
-        </div>
-
-        <!-- ====== TAB: NATIVE VAULT ====== -->
-        <div class="tabPane" id="pane-vault-native" style="display:none;">
-          <div class="label">EXECUTOR (ONLY THIS ADDRESS CAN EXECUTE)</div>
-          <input id="vn_executor" placeholder="0xExecutor…" spellcheck="false" />
-
-          <div class="row2">
-            <div>
-              <div class="label">INACTIVITY (seconds)</div>
-              <input id="vn_period" placeholder="120" inputmode="numeric" />
-              <div class="small">Example: 120 = 2 minutes</div>
-            </div>
-            <div>
-              <div class="label">SAFE WALLET</div>
-              <input id="vn_safe" placeholder="0xSafeWallet…" spellcheck="false" />
-            </div>
-          </div>
-
-          <div class="btnRow">
-            <button class="btn gold" id="vn_create">CREATE NATIVE VAULT</button>
-          </div>
-
-          <div class="hr"></div>
-
-          <div class="label">VAULT ID</div>
-          <div class="row2">
-            <div>
-              <input id="vn_vaultId" placeholder="e.g. 0" inputmode="numeric" />
-              <div class="small">Load shows countdown and whether unlocked.</div>
-            </div>
-            <div class="btnRow" style="margin:0;">
-              <button class="btn ghost" id="vn_load">LOAD</button>
-            </div>
-          </div>
-
-          <div class="label">DEPOSIT (<span id="vn_symbol">—</span>)</div>
-          <input id="vn_depositAmt" placeholder="0.0" inputmode="decimal" />
-
-          <div class="btnRow">
-            <button class="btn ghost" id="vn_deposit">DEPOSIT</button>
-            <button class="btn ghost" id="vn_ping">PING</button>
-            <button class="btn ghost" id="vn_freeze">FREEZE</button>
-            <button class="btn ghost" id="vn_unfreeze">UNFREEZE</button>
-            <button class="btn ghost" id="vn_emergency">EMERGENCY → SAFE</button>
-          </div>
-
-          <div class="hr"></div>
-
-          <div class="card-title" style="margin-bottom:6px;">
-            <h2>EXECUTION TARGETS</h2>
-            <div class="inlineBtns">
-              <div class="pill" id="vn_vector">VECTOR: —</div>
-              <button class="btn ghost" id="vn_add">+ ADD TARGET</button>
-            </div>
-          </div>
-
-          <div id="vn_recipients"></div>
-
-          <div class="btnRow">
-            <button class="btn ghost" id="vn_normalize">NORMALIZE</button>
-            <button class="btn gold" id="vn_execute">EXECUTE (EXECUTOR ONLY)</button>
-          </div>
-
-          <div class="notice" id="vn_timerBox">Timer: —</div>
-        </div>
-
-        <div class="error" id="errBox" style="display:none;"></div>
-        <div class="footer-note">Citadel is non-custodial. Always test small first.</div>
-      </section>
-
-      <!-- RIGHT: TELEMETRY + LOG -->
-      <section class="card" id="rightCard">
-        <div class="card-title">
-          <h2>LIVE TELEMETRY</h2>
-          <div class="badge" id="badgeRight">ONLINE</div>
-        </div>
-
-        <div class="teleGrid">
-          <div class="teleBox">
-            <div class="teleK">NATIVE BALANCE</div>
-            <div class="teleV" id="teleNative">—</div>
-          </div>
-          <div class="teleBox">
-            <div class="teleK">ASSET</div>
-            <div class="teleV" id="teleSymbol">—</div>
-          </div>
-          <div class="teleBox">
-            <div class="teleK">DECIMALS</div>
-            <div class="teleV" id="teleDecimals">—</div>
-          </div>
-          <div class="teleBox">
-            <div class="teleK">TOKEN BAL</div>
-            <div class="teleV" id="teleTokenBal">—</div>
-          </div>
-          <div class="teleBox">
-            <div class="teleK">ALLOWANCE</div>
-            <div class="teleV" id="teleAllowance">—</div>
-          </div>
-          <div class="teleBox">
-            <div class="teleK">ACTIVE CONTRACT</div>
-            <div class="teleV mono" id="teleActive">—</div>
-          </div>
-          <div class="teleBox">
-            <div class="teleK">FEE POLICY</div>
-            <div class="teleV" id="teleFee">—</div>
-          </div>
-          <div class="teleBox">
-            <div class="teleK">STATUS</div>
-            <div class="teleV" id="teleStatus">Ready.</div>
-          </div>
-        </div>
-
-        <div class="hr"></div>
-
-        <div class="card-title" style="margin-bottom:6px;">
-          <h2>RUNTIME LOG</h2>
-          <div class="inlineBtns">
-            <button class="btn ghost" id="btnRefresh">REFRESH</button>
-            <button class="btn ghost" id="btnClear">CLEAR</button>
-          </div>
-        </div>
-
-        <pre class="log" id="log"></pre>
-
-        <div class="footer-note">
-          Operator Console adds extra details; Simple mode keeps it clean for public users.
-        </div>
-      </section>
+        <button class="btn ghost" id="btnSwitch" title="Switch network">SWITCH</button>
+        <button class="btn gold" id="btnConnect">LINK NODE</button>
+      </div>
     </div>
-  </div>
-</main>
+  </header>
 
-<script src="./app.js"></script>
+  <main class="container">
+    <div class="warframe">
+      <div class="scanlines"></div>
+      <div class="gridlines"></div>
+
+      <div class="hud-top">
+        <div class="hud-card">
+          <div class="hud-title">RADAR</div>
+          <div class="hud-radar">
+            <canvas id="radar" width="220" height="220"></canvas>
+            <div class="hud-radar-meta">
+              <div class="small">Ping + Blips on actions</div>
+              <label class="soundToggle">
+                <input type="checkbox" id="chkSound" checked />
+                <span>SOUND</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="hud-card grow">
+          <div class="hud-title">LIVE TELEMETRY</div>
+          <div class="teleGrid">
+            <div class="teleBox">
+              <div class="teleK">NODE BALANCE</div>
+              <div class="teleV" id="teleNative">—</div>
+            </div>
+            <div class="teleBox">
+              <div class="teleK">TOKEN</div>
+              <div class="teleV" id="teleSymbol">—</div>
+            </div>
+            <div class="teleBox">
+              <div class="teleK">DECIMALS</div>
+              <div class="teleV" id="teleDecimals">—</div>
+            </div>
+            <div class="teleBox">
+              <div class="teleK">TOKEN BALANCE</div>
+              <div class="teleV" id="teleTokenBal">—</div>
+            </div>
+            <div class="teleBox">
+              <div class="teleK">ALLOWANCE (ACTIVE)</div>
+              <div class="teleV" id="teleAllowance">—</div>
+            </div>
+            <div class="teleBox">
+              <div class="teleK">ACTIVE CONTRACT</div>
+              <div class="teleV mono" id="teleActive">—</div>
+            </div>
+            <div class="teleBox">
+              <div class="teleK">FEE POLICY</div>
+              <div class="teleV" id="teleFee">—</div>
+            </div>
+            <div class="teleBox">
+              <div class="teleK">STATUS</div>
+              <div class="teleV" id="teleStatus">Ready.</div>
+            </div>
+          </div>
+
+          <div class="row3">
+            <button class="btn ghost" id="btnRefresh">REFRESH</button>
+            <button class="btn ghost" id="btnClear">CLEAR LOG</button>
+            <div class="pill mini mono">Fee Wallet: <span id="feeWalletInline"></span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="split-token">TOKEN SPLIT</button>
+        <button class="tab" data-tab="split-native">NATIVE SPLIT</button>
+        <button class="tab" data-tab="vault-token">TOKEN VAULT</button>
+        <button class="tab" data-tab="vault-native">NATIVE VAULT</button>
+        <button class="tab" data-tab="my-vaults">MY VAULTS</button>
+      </div>
+
+      <div class="grid">
+        <!-- LEFT: WORKSPACE -->
+        <section class="card">
+          <div class="card-title">
+            <h2 id="paneTitle">TOKEN SPLIT</h2>
+            <div class="badge" id="paneBadge">CITADEL</div>
+          </div>
+
+          <div class="error" id="errBox" style="display:none;"></div>
+
+          <!-- SPLIT TOKEN -->
+          <div id="pane-split-token">
+            <div class="label">TOKEN ADDRESS</div>
+            <input id="st_token" placeholder="0x…" spellcheck="false" />
+
+            <div class="row2">
+              <div>
+                <div class="label">AMOUNT</div>
+                <input id="st_amount" placeholder="0.0" inputmode="decimal" />
+                <div class="small">Approve spender = <b>Token Splitter</b>. Execute = 1 tx.</div>
+              </div>
+              <div class="miniCard">
+                <div class="miniTitle">DELIVERY</div>
+                <div class="miniValue" id="st_usd">—</div>
+                <div class="miniSub" id="st_postFee">Post-fee delivery —</div>
+                <div class="miniSub2">Fee: <span class="feeTiny" id="st_feeTiny">—</span></div>
+              </div>
+            </div>
+
+            <div class="card-title tight">
+              <h3>TARGET MATRIX</h3>
+              <div class="inlineBtns">
+                <div class="pill" id="st_vector">VECTOR: —</div>
+                <button class="btn ghost" id="st_add">+ ADD TARGET</button>
+              </div>
+            </div>
+
+            <div class="small">Use weights (50/50). NORMALIZE sets total to 100.</div>
+            <div id="st_recipients"></div>
+
+            <div class="btnRow">
+              <button class="btn ghost" id="st_normalize">NORMALIZE</button>
+              <button class="btn ghost" id="st_approve">APPROVE</button>
+              <button class="btn gold" id="st_execute">EXECUTE</button>
+            </div>
+          </div>
+
+          <!-- SPLIT NATIVE -->
+          <div id="pane-split-native" style="display:none;">
+            <div class="notice">
+              Native split routes through your <b>Native Splitter</b> (fee + distribution). 1 tx.
+            </div>
+
+            <div class="row2">
+              <div>
+                <div class="label">AMOUNT (<span id="sn_symbol">—</span>)</div>
+                <input id="sn_amount" placeholder="0.0" inputmode="decimal" />
+                <div class="small" id="sn_maxHint">Tip: use MAX GAS-SAFE if needed.</div>
+              </div>
+              <div class="miniCard">
+                <div class="miniTitle">TOOLS</div>
+                <div class="miniSub">Gas-safe reserve included.</div>
+                <button class="btn ghost full" id="sn_max">MAX (GAS-SAFE)</button>
+              </div>
+            </div>
+
+            <div class="card-title tight">
+              <h3>TARGET MATRIX</h3>
+              <div class="inlineBtns">
+                <div class="pill" id="sn_vector">VECTOR: —</div>
+                <button class="btn ghost" id="sn_add">+ ADD TARGET</button>
+              </div>
+            </div>
+
+            <div id="sn_recipients"></div>
+
+            <div class="btnRow">
+              <button class="btn ghost" id="sn_normalize">NORMALIZE</button>
+              <button class="btn gold" id="sn_execute">EXECUTE</button>
+            </div>
+          </div>
+
+          <!-- VAULT TOKEN -->
+          <div id="pane-vault-token" style="display:none;">
+            <div class="notice">
+              Token Vault locks ERC20/BEP20 until inactivity. Anyone can execute after unlock (your contract design).
+            </div>
+
+            <div class="label">TOKEN ADDRESS</div>
+            <input id="vt_token" placeholder="0x…" spellcheck="false" />
+
+            <div class="row2">
+              <div>
+                <div class="label">LOCK AMOUNT</div>
+                <input id="vt_amount" placeholder="0.0" inputmode="decimal" />
+                <div class="small">Approve spender = <b>Token Vault</b>. CreateVault pulls tokens.</div>
+              </div>
+              <div>
+                <div class="label">INACTIVITY (SECONDS)</div>
+                <input id="vt_period" placeholder="120" inputmode="numeric" />
+                <div class="small">Example: 120 = 2 minutes (testing). Production: days/weeks.</div>
+              </div>
+            </div>
+
+            <div class="label">SAFE WALLET (OPTIONAL)</div>
+            <input id="vt_safe" placeholder="0x… (or leave blank)" spellcheck="false" />
+
+            <div class="card-title tight">
+              <h3>RECIPIENTS + WEIGHTS</h3>
+              <div class="inlineBtns">
+                <div class="pill" id="vt_vector">VECTOR: —</div>
+                <button class="btn ghost" id="vt_add">+ ADD TARGET</button>
+              </div>
+            </div>
+
+            <div id="vt_recipients"></div>
+
+            <div class="btnRow">
+              <button class="btn ghost" id="vt_normalize">NORMALIZE</button>
+              <button class="btn ghost" id="vt_approve">APPROVE</button>
+              <button class="btn gold" id="vt_create">CREATE VAULT</button>
+            </div>
+
+            <div class="hr"></div>
+
+            <div class="row2">
+              <div>
+                <div class="label">VAULT ID</div>
+                <input id="vt_vaultId" placeholder="0" inputmode="numeric" />
+              </div>
+              <div class="btnRow">
+                <button class="btn ghost full" id="vt_load">LOAD</button>
+              </div>
+            </div>
+
+            <pre class="timer" id="vt_timerBox">Load a Vault ID to view timer…</pre>
+
+            <div class="btnRow">
+              <button class="btn ghost" id="vt_ping">PING</button>
+              <button class="btn ghost" id="vt_freeze">FREEZE</button>
+              <button class="btn ghost" id="vt_unfreeze">UNFREEZE</button>
+              <button class="btn gold" id="vt_execute">EXECUTE</button>
+            </div>
+          </div>
+
+          <!-- VAULT NATIVE -->
+          <div id="pane-vault-native" style="display:none;">
+            <div class="notice">
+              Native Vault: owner picks <b>executor</b>. Only executor can execute after unlock. Deposits are separate.
+            </div>
+
+            <div class="label">EXECUTOR (ONLY THIS ADDRESS CAN EXECUTE)</div>
+            <input id="vn_executor" placeholder="0x…" spellcheck="false" />
+
+            <div class="row2">
+              <div>
+                <div class="label">INACTIVITY (SECONDS)</div>
+                <input id="vn_period" placeholder="120" inputmode="numeric" />
+              </div>
+              <div>
+                <div class="label">SAFE WALLET</div>
+                <input id="vn_safe" placeholder="0x…" spellcheck="false" />
+              </div>
+            </div>
+
+            <div class="btnRow">
+              <button class="btn gold" id="vn_create">CREATE VAULT</button>
+            </div>
+
+            <div class="hr"></div>
+
+            <div class="row2">
+              <div>
+                <div class="label">VAULT ID</div>
+                <input id="vn_vaultId" placeholder="0" inputmode="numeric" />
+              </div>
+              <div class="btnRow">
+                <button class="btn ghost full" id="vn_load">LOAD</button>
+              </div>
+            </div>
+
+            <pre class="timer" id="vn_timerBox">Load a Vault ID to view timer…</pre>
+
+            <div class="row2">
+              <div>
+                <div class="label">DEPOSIT AMOUNT (<span id="vn_symbol">—</span>)</div>
+                <input id="vn_depositAmt" placeholder="0.0" inputmode="decimal" />
+              </div>
+              <div class="btnRow">
+                <button class="btn ghost full" id="vn_deposit">DEPOSIT</button>
+              </div>
+            </div>
+
+            <div class="btnRow">
+              <button class="btn ghost" id="vn_ping">PING</button>
+              <button class="btn ghost" id="vn_freeze">FREEZE</button>
+              <button class="btn ghost" id="vn_unfreeze">UNFREEZE</button>
+              <button class="btn ghost" id="vn_emergency">EMERGENCY → SAFE</button>
+            </div>
+
+            <div class="card-title tight">
+              <h3>EXECUTE TARGETS + WEIGHTS</h3>
+              <div class="inlineBtns">
+                <div class="pill" id="vn_vector">VECTOR: —</div>
+                <button class="btn ghost" id="vn_add">+ ADD TARGET</button>
+              </div>
+            </div>
+
+            <div id="vn_recipients"></div>
+
+            <div class="btnRow">
+              <button class="btn ghost" id="vn_normalize">NORMALIZE</button>
+              <button class="btn gold" id="vn_execute">EXECUTE</button>
+            </div>
+          </div>
+
+          <!-- MY VAULTS -->
+          <div id="pane-my-vaults" style="display:none;">
+            <div class="notice">
+              This scans <b>VaultCreated</b> logs and lists vault IDs for your connected wallet. No scanner needed.
+            </div>
+
+            <div class="row2">
+              <div>
+                <div class="label">SCAN RANGE (BLOCKS)</div>
+                <input id="mv_range" placeholder="200000" inputmode="numeric" />
+                <div class="small">Default is last 200,000 blocks. Increase if you deployed long ago.</div>
+              </div>
+              <div class="btnRow">
+                <button class="btn gold full" id="mv_scan">SCAN</button>
+              </div>
+            </div>
+
+            <div class="hr"></div>
+
+            <div class="card-title tight">
+              <h3>TOKEN VAULTS</h3>
+              <div class="pill mini" id="mv_tokenCount">—</div>
+            </div>
+            <div id="mv_tokenList" class="vaultList"></div>
+
+            <div class="hr"></div>
+
+            <div class="card-title tight">
+              <h3>NATIVE VAULTS</h3>
+              <div class="pill mini" id="mv_nativeCount">—</div>
+            </div>
+            <div id="mv_nativeList" class="vaultList"></div>
+          </div>
+
+          <div class="footer-note">
+            Citadel v2 • Mobile-first • Chain-honest. Test small first.
+          </div>
+        </section>
+
+        <!-- RIGHT: LOG -->
+        <section class="card">
+          <div class="card-title">
+            <h2>RUNTIME LOG</h2>
+            <div class="inlineBtns">
+              <button class="btn ghost" id="btnViewExplorer">OPEN EXPLORER</button>
+            </div>
+          </div>
+
+          <pre class="log" id="log"></pre>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <script src="./app.js"></script>
 </body>
 </html>
