@@ -3,17 +3,6 @@
   "use strict";
 
   /***********************
-   * ZEPHENHEL CITADEL v2 — TOP TIER APP.JS (SAFE REWRITE)
-   * - Keeps layout identical
-   * - Fixes overflow via CSS patch (provided separately)
-   * - Adds SONAR ping (sound + visual rings)
-   * - Adds click-to-copy for Active Contract + Fee Wallet
-   * - Adds mobile haptics (vibrate) when supported
-   * - Adds better error parsing + safer guards
-   * - Adds lightweight persistence (last token inputs + last chain)
-   ***********************/
-
-  /***********************
    * YOU (GLOBAL FEE WALLET DISPLAY)
    ***********************/
   const GLOBAL_FEE_WALLET = "0x9285d738aD948C09E14BAc12e8D2Cc3E11eC59ec";
@@ -48,7 +37,10 @@
       tokenVault: "0x798b4620d29cb6f1d4bFdA88D4537769E2BDdD47",
       nativeSplitter: "0xBcd7C5054522bf0A6DB5a63Fa2513a428e70b0FD",
       nativeVault: "0xB0b6b555d37220611e6d3d8c0DB6eC0C0b9A81Fc",
-      rpcFallbacks: ["https://cloudflare-eth.com", "https://rpc.ankr.com/eth"],
+      rpcFallbacks: [
+        "https://cloudflare-eth.com",
+        "https://rpc.ankr.com/eth",
+      ],
     },
     polygon: {
       chainId: 137,
@@ -60,7 +52,10 @@
       tokenVault: "0xde07160A2eC236315Dd27e9600f88Ba26F86f06e",
       nativeSplitter: "0xe59bd693661bB4201C1E91EB7b2A88E525C4cB99",
       nativeVault: "0xEB3992D48964783FC6B9c9881DfF67cC91ce2b4F",
-      rpcFallbacks: ["https://polygon-rpc.com", "https://rpc.ankr.com/polygon"],
+      rpcFallbacks: [
+        "https://polygon-rpc.com",
+        "https://rpc.ankr.com/polygon",
+      ],
     },
   };
 
@@ -234,7 +229,6 @@
   let provider = null;
   let signer = null;
   let userAddress = null;
-
   let currentKey = "bsc";
   let activeTab = "split-token";
   let lastExplorerBase = CONTRACTS.bsc.explorer;
@@ -265,30 +259,60 @@
   let timerIntervalVT = null;
   let timerIntervalVN = null;
 
-  // radar & sonar visuals
+  // radar blips
   let radarBlips = [];
   let radarAngle = 0;
-  let sonarRings = []; // expanding rings
 
   /***********************
-   * PERSISTENCE (LIGHT)
+   * LOG / UI
    ***********************/
-  const LS = {
-    key: (k) => `citadel_v2_${k}`,
-    get: (k, fallback = null) => {
-      try {
-        const v = localStorage.getItem(LS.key(k));
-        return v == null ? fallback : JSON.parse(v);
-      } catch { return fallback; }
-    },
-    set: (k, val) => {
-      try { localStorage.setItem(LS.key(k), JSON.stringify(val)); } catch {}
+  function log(line) {
+    const ts = new Date().toLocaleTimeString();
+    el.log.textContent = `[${ts}] ${line}\n` + el.log.textContent;
+  }
+  function setStatus(msg) {
+    el.teleStatus.textContent = msg;
+    log(msg);
+    radarBlip();
+  }
+  function setError(msg) {
+    el.errBox.style.display = msg ? "block" : "none";
+    el.errBox.textContent = msg || "";
+    if (msg) log(`ERROR: ${msg}`);
+    if (msg) radarBlip(true);
+  }
+  function shortAddr(a) {
+    if (!a || a.length < 10) return a || "—";
+    return `${a.slice(0, 6)}…${a.slice(-4)}`;
+  }
+  function isAddr(a) {
+    try { return ethers.utils.isAddress(a); } catch { return false; }
+  }
+  function checksum(a) { return ethers.utils.getAddress(a); }
+  function activeCfg() { return CONTRACTS[currentKey]; }
+  function toBN(n) { return ethers.BigNumber.from(String(n)); }
+
+  async function copyToClipboard(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus("COPIED ✅");
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setStatus("COPIED ✅");
     }
-  };
+  }
 
-  /***********************
-   * HELPERS
-   ***********************/
+  function clampInt(n, min, max) {
+    n = Math.floor(Number(n));
+    if (Number.isNaN(n)) return min;
+    return Math.max(min, Math.min(max, n));
+  }
+
   function nowSec() { return Math.floor(Date.now() / 1000); }
   function fmtCountdown(seconds) {
     const s = Math.max(0, Number(seconds) || 0);
@@ -303,99 +327,16 @@
     if (!sec) return "—";
     return new Date(sec * 1000).toLocaleString();
   }
-  function activeCfg() { return CONTRACTS[currentKey]; }
-  function isAddr(a) {
-    try { return ethers.utils.isAddress(a); } catch { return false; }
-  }
-  function checksum(a) { return ethers.utils.getAddress(a); }
-  function shortAddr(a) {
-    if (!a || a.length < 10) return a || "—";
-    return `${a.slice(0, 6)}…${a.slice(-4)}`;
-  }
-  function clampInt(n, min, max) {
-    n = Math.floor(Number(n));
-    if (Number.isNaN(n)) return min;
-    return Math.max(min, Math.min(max, n));
-  }
-  function toBN(n) { return ethers.BigNumber.from(String(n)); }
-
-  function safeVibrate(ms = 25) {
-    try {
-      if (navigator.vibrate) navigator.vibrate(ms);
-    } catch {}
-  }
-
-  function parseEthersError(e) {
-    return (
-      e?.error?.message ||
-      e?.data?.message ||
-      e?.reason ||
-      e?.message ||
-      "Unknown error."
-    );
-  }
-
-  async function copyText(text) {
-    try {
-      await navigator.clipboard.writeText(text);
-      safeVibrate(18);
-      return true;
-    } catch {
-      // fallback
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        ta.style.position = "fixed";
-        ta.style.left = "-9999px";
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
-        safeVibrate(18);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-  }
 
   /***********************
-   * LOG / STATUS
-   ***********************/
-  function log(line) {
-    const ts = new Date().toLocaleTimeString();
-    el.log.textContent = `[${ts}] ${line}\n` + el.log.textContent;
-  }
-
-  function setStatus(msg, { blip = true, sonar = false } = {}) {
-    el.teleStatus.textContent = msg;
-    log(msg);
-    if (blip) radarBlip(false);
-    if (sonar) sonarPing();
-  }
-
-  function setError(msg) {
-    el.errBox.style.display = msg ? "block" : "none";
-    el.errBox.textContent = msg || "";
-    if (msg) {
-      log(`ERROR: ${msg}`);
-      radarBlip(true);
-      errorBuzz();
-      safeVibrate(35);
-    }
-  }
-
-  /***********************
-   * SOUND (RADAR PING + SONAR PING + SUCCESS/ERROR)
+   * SOUND + RADAR (PING + SONAR)
    ***********************/
   let audioCtx = null;
-
   function ensureAudio() {
     if (!el.chkSound?.checked) return null;
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     return audioCtx;
   }
-
   function beep({ freq = 880, dur = 0.08, type = "sine", gain = 0.10 } = {}) {
     const ctx = ensureAudio();
     if (!ctx) return;
@@ -404,37 +345,20 @@
     o.type = type;
     o.frequency.value = freq;
     g.gain.value = gain;
-    o.connect(g);
-    g.connect(ctx.destination);
-    o.start();
-    o.stop(ctx.currentTime + dur);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime + dur);
   }
-
   function pingFx() {
-    // radar ping (fast triple)
     beep({ freq: 220, dur: 0.05, type: "triangle", gain: 0.08 });
     setTimeout(() => beep({ freq: 440, dur: 0.06, type: "triangle", gain: 0.08 }), 70);
     setTimeout(() => beep({ freq: 880, dur: 0.07, type: "triangle", gain: 0.08 }), 150);
   }
-
   function sonarFx() {
-    // sonar ping (deep “whomp” + rising tail)
-    beep({ freq: 120, dur: 0.10, type: "sine", gain: 0.10 });
-    setTimeout(() => beep({ freq: 180, dur: 0.12, type: "sine", gain: 0.06 }), 90);
-    setTimeout(() => beep({ freq: 260, dur: 0.10, type: "sine", gain: 0.045 }), 190);
+    // deep pulse for heavy actions
+    beep({ freq: 130, dur: 0.10, type: "sine", gain: 0.10 });
+    setTimeout(() => beep({ freq: 90, dur: 0.14, type: "sine", gain: 0.08 }), 120);
+    setTimeout(() => beep({ freq: 60, dur: 0.18, type: "sine", gain: 0.06 }), 260);
   }
-
-  function successChime() {
-    beep({ freq: 523, dur: 0.06, type: "sine", gain: 0.06 });
-    setTimeout(() => beep({ freq: 784, dur: 0.07, type: "sine", gain: 0.07 }), 70);
-    setTimeout(() => beep({ freq: 1046, dur: 0.08, type: "sine", gain: 0.07 }), 150);
-  }
-
-  function errorBuzz() {
-    beep({ freq: 150, dur: 0.12, type: "sawtooth", gain: 0.06 });
-    setTimeout(() => beep({ freq: 110, dur: 0.12, type: "sawtooth", gain: 0.05 }), 90);
-  }
-
   function coinBeat(count) {
     const n = clampInt(count, 1, 24);
     for (let i = 0; i < n; i++) {
@@ -446,9 +370,6 @@
     }
   }
 
-  /***********************
-   * RADAR / SONAR VISUALS
-   ***********************/
   function radarBlip(isError = false) {
     radarBlips.push({
       t: performance.now(),
@@ -458,16 +379,6 @@
     });
     if (radarBlips.length > 18) radarBlips.shift();
     if (!isError) pingFx();
-  }
-
-  function sonarPing() {
-    sonarRings.push({
-      t: performance.now(),
-      life: 1700,
-    });
-    if (sonarRings.length > 6) sonarRings.shift();
-    sonarFx();
-    safeVibrate(22);
   }
 
   function drawRadar() {
@@ -480,14 +391,12 @@
 
     ctx.clearRect(0, 0, w, h);
 
-    // background glow
     const grad = ctx.createRadialGradient(cx, cy, 5, cx, cy, R * 1.15);
     grad.addColorStop(0, "rgba(245,196,77,0.10)");
     grad.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
 
-    // rings
     ctx.strokeStyle = "rgba(245,196,77,0.18)";
     ctx.lineWidth = 1;
     for (let i = 1; i <= 4; i++) {
@@ -496,12 +405,10 @@
       ctx.stroke();
     }
 
-    // cross lines
     ctx.strokeStyle = "rgba(255,255,255,0.07)";
     ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke();
 
-    // sweep
     radarAngle += 0.015;
     const a = radarAngle % (Math.PI * 2);
     const sx = cx + Math.cos(a) * R;
@@ -514,7 +421,6 @@
     ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(sx, sy); ctx.stroke();
 
-    // sweep cone
     ctx.fillStyle = "rgba(245,196,77,0.05)";
     ctx.beginPath();
     ctx.moveTo(cx, cy);
@@ -522,21 +428,7 @@
     ctx.closePath();
     ctx.fill();
 
-    // sonar rings (expand from center)
     const now = performance.now();
-    sonarRings = sonarRings.filter(r => now - r.t < r.life);
-    for (const r of sonarRings) {
-      const age = (now - r.t) / r.life;
-      const rr = R * (0.08 + age * 0.95);
-      const alpha = Math.max(0, 1 - age);
-      ctx.strokeStyle = `rgba(245,196,77,${0.22 * alpha})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, rr, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
-    // blips
     radarBlips = radarBlips.filter(b => now - b.t < 2200);
     for (const b of radarBlips) {
       const age = (now - b.t) / 2200;
@@ -545,10 +437,14 @@
       const x = cx + Math.cos(b.a) * rr;
       const y = cy + Math.sin(b.a) * rr;
       ctx.fillStyle = b.err ? `rgba(255,77,77,${0.55 * alpha})` : `rgba(245,196,77,${0.55 * alpha})`;
-      ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fill();
 
       ctx.strokeStyle = b.err ? `rgba(255,77,77,${0.35 * alpha})` : `rgba(245,196,77,${0.35 * alpha})`;
-      ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(x, y, 10, 0, Math.PI * 2);
+      ctx.stroke();
     }
 
     requestAnimationFrame(drawRadar);
@@ -580,8 +476,6 @@
     el.sn_symbol.textContent = activeCfg().nativeSymbol;
     el.vn_symbol.textContent = activeCfg().nativeSymbol;
     lastExplorerBase = activeCfg().explorer;
-
-    LS.set("lastChain", currentKey);
   }
 
   async function switchNetwork() {
@@ -596,7 +490,7 @@
       currentKey = el.selChain.value;
       await initContracts();
       await refreshTelemetry();
-      setStatus(`THEATER SWITCHED → ${cfg.chainName}`, { sonar: true });
+      setStatus(`THEATER SWITCHED → ${cfg.chainName}`);
     } catch (err) {
       setError(err?.message || "Network switch failed.");
     }
@@ -616,7 +510,9 @@
     el.btnConnect.classList.add("connected");
     el.btnConnect.disabled = true;
 
-    setStatus(`NODE LINKED: ${userAddress}`, { sonar: true });
+    radarBlip();
+    setStatus(`NODE LINKED: ${userAddress}`);
+
     await syncChainFromWallet();
     await initContracts();
     await refreshTelemetry();
@@ -635,13 +531,11 @@
 
   async function initContracts() {
     const cfg = activeCfg();
-
     tokenSplitter = new ethers.Contract(cfg.tokenSplitter, TOKEN_SPLITTER_ABI, signer || provider);
     nativeSplitter = new ethers.Contract(cfg.nativeSplitter, NATIVE_SPLITTER_ABI, signer || provider);
     tokenVault = new ethers.Contract(cfg.tokenVault, TOKEN_VAULT_ABI, signer || provider);
     nativeVault = new ethers.Contract(cfg.nativeVault, NATIVE_VAULT_ABI, signer || provider);
 
-    // fee policy (prefer splitter on active chain)
     try {
       feeBps = Number(await tokenSplitter.feeBps());
       feeWallet = await tokenSplitter.feeWallet();
@@ -655,21 +549,24 @@
     el.teleFee.textContent = `${feePct}% → ${feeWallet ? shortAddr(feeWallet) : shortAddr(GLOBAL_FEE_WALLET)}`;
     el.feeWalletInline.textContent = shortAddr(GLOBAL_FEE_WALLET);
 
-    el.teleActive.textContent = activeContractForTab();
-    setStatus("CONTRACT ROUTER ONLINE.", { blip: true });
+    // tap-to-copy fee wallet
+    el.feeWalletInline.title = GLOBAL_FEE_WALLET;
+    el.feeWalletInline.onclick = () => copyToClipboard(GLOBAL_FEE_WALLET);
+
+    const full = activeContractForTab();
+    el.teleActive.textContent = full;
+    el.teleActive.title = full;
+    el.teleActive.onclick = () => copyToClipboard(full);
+
+    setStatus("CONTRACT ROUTER ONLINE.");
   }
 
   /***********************
-   * TOKEN LOAD + TELEMETRY (with debounce)
+   * TOKEN LOAD + TELEMETRY
    ***********************/
-  let tokenLoadTimer = null;
-
   async function loadToken(address) {
     if (!isAddr(address)) {
-      token = null;
-      tokenAddr = null;
-      tokenSymbol = "—";
-      tokenDecimals = 18;
+      token = null; tokenAddr = null; tokenSymbol = "—"; tokenDecimals = 18;
       el.teleSymbol.textContent = "—";
       el.teleDecimals.textContent = "—";
       el.teleTokenBal.textContent = "—";
@@ -678,23 +575,11 @@
     }
     tokenAddr = checksum(address);
     token = new ethers.Contract(tokenAddr, ERC20_ABI, signer || provider);
-
     try { tokenSymbol = await token.symbol(); } catch { tokenSymbol = "TOKEN"; }
     try { tokenDecimals = Number(await token.decimals()); } catch { tokenDecimals = 18; }
-
     el.teleSymbol.textContent = tokenSymbol;
     el.teleDecimals.textContent = String(tokenDecimals);
-    setStatus(`ASSET LOADED: ${tokenSymbol} (${tokenDecimals} decimals)`, { blip: true });
-
-    // persist last typed token per chain
-    LS.set(`lastToken_${currentKey}`, tokenAddr);
-  }
-
-  function scheduleTokenLoad(addr) {
-    if (tokenLoadTimer) clearTimeout(tokenLoadTimer);
-    tokenLoadTimer = setTimeout(() => {
-      loadToken(addr).then(refreshTelemetry).catch(() => {});
-    }, 250);
+    setStatus(`ASSET LOADED: ${tokenSymbol} (${tokenDecimals} decimals)`);
   }
 
   async function refreshTelemetry() {
@@ -703,12 +588,14 @@
     const cfg = activeCfg();
     const net = await provider.getNetwork();
     el.pillNet.textContent = `THEATER: ${cfg.chainName} (chainId ${net.chainId})`;
-    el.teleActive.textContent = activeContractForTab();
+
+    const full = activeContractForTab();
+    el.teleActive.textContent = full;
+    el.teleActive.title = full;
+    el.teleActive.onclick = () => copyToClipboard(full);
 
     if (!userAddress) {
       el.teleNative.textContent = "—";
-      updateSplitTokenEstimate();
-      updateGuards();
       return;
     }
 
@@ -725,7 +612,10 @@
         el.teleTokenBal.textContent = `${ethers.utils.formatUnits(tb, tokenDecimals)} ${tokenSymbol}`;
       } catch { el.teleTokenBal.textContent = "—"; }
 
-      const spender = (activeTab === "vault-token") ? cfg.tokenVault : cfg.tokenSplitter;
+      let spender;
+      if (activeTab === "vault-token") spender = cfg.tokenVault;
+      else spender = cfg.tokenSplitter;
+
       try {
         const al = await token.allowance(userAddress, spender);
         el.teleAllowance.textContent = `${ethers.utils.formatUnits(al, tokenDecimals)} ${tokenSymbol}`;
@@ -737,11 +627,10 @@
   }
 
   /***********************
-   * RECIPIENTS UI (with live validation highlights)
+   * RECIPIENTS UI
    ***********************/
   function renderRecipients(container, model, vectorEl, onChange) {
     container.innerHTML = "";
-
     model.forEach((r, idx) => {
       const wrap = document.createElement("div");
       wrap.className = "row";
@@ -750,39 +639,21 @@
       inpA.placeholder = "0xTARGET…";
       inpA.spellcheck = false;
       inpA.value = r.account || "";
-
-      const validateA = () => {
-        const v = (inpA.value || "").trim();
-        inpA.classList.toggle("invalid", v.length > 0 && !isAddr(v));
-      };
-
       inpA.addEventListener("input", () => {
         model[idx].account = inpA.value.trim();
-        validateA();
         updateVector(vectorEl, model);
         onChange?.();
       });
-      inpA.addEventListener("blur", validateA);
-      validateA();
 
       const inpS = document.createElement("input");
       inpS.placeholder = "50";
       inpS.inputMode = "numeric";
       inpS.value = r.share || "";
-
-      const validateS = () => {
-        const n = Number((inpS.value || "").trim());
-        inpS.classList.toggle("invalid", !(Number.isFinite(n) && n > 0));
-      };
-
       inpS.addEventListener("input", () => {
         model[idx].share = inpS.value.trim();
-        validateS();
         updateVector(vectorEl, model);
         onChange?.();
       });
-      inpS.addEventListener("blur", validateS);
-      validateS();
 
       const btnX = document.createElement("button");
       btnX.className = "btn ghost";
@@ -794,8 +665,6 @@
         renderRecipients(container, model, vectorEl, onChange);
         updateVector(vectorEl, model);
         onChange?.();
-        safeVibrate(16);
-        radarBlip();
       });
 
       wrap.appendChild(inpA);
@@ -803,52 +672,45 @@
       wrap.appendChild(btnX);
       container.appendChild(wrap);
     });
-
     updateVector(vectorEl, model);
   }
 
   function updateVector(vectorEl, model) {
     const nums = model.map(x => Number(x.share || 0)).map(n => (Number.isFinite(n) ? n : 0));
-    const sum = nums.reduce((a, b) => a + b, 0);
+    const sum = nums.reduce((a,b)=>a+b,0);
     vectorEl.textContent = `VECTOR: ${sum || 0}`;
   }
 
   function normalizeModel(model, container, vectorEl, onChange) {
     const nums = model.map(x => Number(x.share || 0)).map(n => (Number.isFinite(n) ? n : 0));
-    const sum = nums.reduce((a, b) => a + b, 0);
+    const sum = nums.reduce((a,b)=>a+b,0);
     if (sum <= 0) return setError("Vector must be > 0.");
-
     let scaled = nums.map(n => Math.floor((n / sum) * 100));
-    let s2 = scaled.reduce((a, b) => a + b, 0);
+    let s2 = scaled.reduce((a,b)=>a+b,0);
     scaled[scaled.length - 1] += (100 - s2);
-
-    for (let i = 0; i < model.length; i++) model[i].share = String(Math.max(1, scaled[i]));
+    for (let i=0;i<model.length;i++) model[i].share = String(Math.max(1, scaled[i]));
     renderRecipients(container, model, vectorEl, onChange);
     setError("");
-    setStatus("VECTOR NORMALIZED → 100", { blip: true });
-    safeVibrate(14);
+    radarBlip();
   }
 
   function validateRecipients(model) {
     const accounts = [];
     const shares = [];
-
-    for (let i = 0; i < model.length; i++) {
+    for (let i=0;i<model.length;i++) {
       const a = (model[i].account || "").trim();
       const s = (model[i].share || "").trim();
-      if (!isAddr(a)) return { ok: false, msg: `Target #${i + 1} address invalid.` };
+      if (!isAddr(a)) return { ok:false, msg:`Target #${i+1} address invalid.` };
       const n = Number(s);
-      if (!Number.isFinite(n) || n <= 0) return { ok: false, msg: `Target #${i + 1} share must be > 0.` };
+      if (!Number.isFinite(n) || n <= 0) return { ok:false, msg:`Target #${i+1} share must be > 0.` };
       accounts.push(checksum(a));
       shares.push(toBN(Math.floor(n)));
     }
-
-    const lowers = accounts.map(x => x.toLowerCase());
+    const lowers = accounts.map(x=>x.toLowerCase());
     const set = new Set(lowers);
-    if (set.size !== accounts.length) return { ok: false, msg: "Duplicate targets detected." };
-    if (set.size === 1) return { ok: false, msg: "All targets resolve to the same address." };
-
-    return { ok: true, accounts, shares };
+    if (set.size !== accounts.length) return { ok:false, msg:"Duplicate targets detected." };
+    if (set.size === 1) return { ok:false, msg:"All targets resolve to the same address." };
+    return { ok:true, accounts, shares };
   }
 
   /***********************
@@ -874,17 +736,16 @@
 
     try {
       el.st_approve.disabled = true;
-      setStatus(`APPROVING ${tokenSymbol} → Splitter ${shortAddr(cfg.tokenSplitter)}…`, { sonar: true });
+      setStatus(`APPROVING ${tokenSymbol} → Splitter ${shortAddr(cfg.tokenSplitter)}…`);
 
       const tx = await token.approve(cfg.tokenSplitter, amountWei);
       log(`Approve tx: ${tx.hash}`);
       await tx.wait();
 
-      successChime();
-      setStatus("APPROVE CONFIRMED ✅", { sonar: true });
+      setStatus("APPROVE CONFIRMED ✅");
       await refreshTelemetry();
     } catch (e) {
-      setError(parseEthersError(e) || "Approve failed.");
+      setError(e?.data?.message || e?.message || "Approve failed.");
     } finally {
       el.st_approve.disabled = false;
       updateGuards();
@@ -912,24 +773,25 @@
     try {
       const allow = await token.allowance(userAddress, cfg.tokenSplitter);
       if (allow.lt(amountWei)) return setError(`Allowance too low. Approve at least ${amt} ${tokenSymbol} first.`);
-    } catch { /* ignore */ }
+    } catch {}
 
     try {
       el.st_execute.disabled = true;
-      setStatus("EXECUTE TOKEN SPLIT…", { sonar: true });
+      setStatus("EXECUTE TOKEN SPLIT…");
+      sonarFx();
       coinBeat(vr.accounts.length);
 
       await tokenSplitter.callStatic.depositAndDistribute(checksum(taddr), vr.accounts, vr.shares, amountWei);
-      const tx = await tokenSplitter.depositAndDistribute(checksum(taddr), vr.accounts, vr.shares, amountWei);
 
+      const tx = await tokenSplitter.depositAndDistribute(checksum(taddr), vr.accounts, vr.shares, amountWei);
       log(`Execute tx: ${tx.hash}`);
       await tx.wait();
 
-      successChime();
-      setStatus("TOKEN SPLIT COMPLETE ✅", { sonar: true });
+      setStatus("TOKEN SPLIT COMPLETE ✅");
       await refreshTelemetry();
     } catch (e) {
-      setError(parseEthersError(e) || "Execute failed.");
+      const msg = e?.error?.message || e?.data?.message || e?.reason || e?.message || "Execute failed.";
+      setError(msg);
     } finally {
       el.st_execute.disabled = false;
       updateGuards();
@@ -939,17 +801,14 @@
   function updateSplitTokenEstimate() {
     const raw = (el.st_amount.value || "").trim();
     const num = Number(raw);
-
     if (!raw || !Number.isFinite(num) || num <= 0) {
       el.st_usd.textContent = "—";
       el.st_postFee.textContent = "Post-fee delivery —";
       return;
     }
-
     const afterFee = num * (1 - feeBps / 10000);
     el.st_usd.textContent = `~${raw} ${tokenSymbol}`;
-    el.st_postFee.textContent =
-      `Post-fee ~ ${afterFee.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")} ${tokenSymbol}`;
+    el.st_postFee.textContent = `Post-fee ~ ${afterFee.toFixed(6).replace(/0+$/,"").replace(/\.$/,"")} ${tokenSymbol}`;
   }
 
   /***********************
@@ -965,13 +824,11 @@
       const reserve = ethers.utils.parseEther(currentKey === "ethereum" ? "0.005" : "0.003");
       const spendable = bal.gt(reserve) ? bal.sub(reserve) : ethers.BigNumber.from(0);
       const amt = ethers.utils.formatEther(spendable);
-
       el.sn_amount.value = amt;
       el.sn_maxHint.textContent = `Max set: ${amt} ${cfg.nativeSymbol}`;
-      setStatus(`MAX SET (gas-safe). Reserved ${ethers.utils.formatEther(reserve)} ${cfg.nativeSymbol}`, { blip: true });
-      sonarPing();
+      setStatus(`MAX SET (gas-safe). Reserved ${ethers.utils.formatEther(reserve)} ${cfg.nativeSymbol}`);
     } catch (e) {
-      setError(parseEthersError(e) || "Failed to compute MAX.");
+      setError(e?.message || "Failed to compute MAX.");
     }
   }
 
@@ -990,20 +847,20 @@
 
     try {
       el.sn_execute.disabled = true;
-      setStatus("EXECUTE NATIVE SPLIT…", { sonar: true });
+      setStatus("EXECUTE NATIVE SPLIT…");
+      sonarFx();
       coinBeat(vr.accounts.length);
 
       await nativeSplitter.callStatic.distributeNative(vr.accounts, vr.shares, { value: valueWei });
       const tx = await nativeSplitter.distributeNative(vr.accounts, vr.shares, { value: valueWei });
-
       log(`Native split tx: ${tx.hash}`);
       await tx.wait();
 
-      successChime();
-      setStatus("NATIVE SPLIT COMPLETE ✅", { sonar: true });
+      setStatus("NATIVE SPLIT COMPLETE ✅");
       await refreshTelemetry();
     } catch (e) {
-      setError(parseEthersError(e) || "Native split failed.");
+      const msg = e?.error?.message || e?.data?.message || e?.reason || e?.message || "Native split failed.";
+      setError(msg);
     } finally {
       el.sn_execute.disabled = false;
       updateGuards();
@@ -1013,11 +870,6 @@
   /***********************
    * TOKEN VAULT
    ***********************/
-  function stopVTTimer() {
-    if (timerIntervalVT) clearInterval(timerIntervalVT);
-    timerIntervalVT = null;
-  }
-
   async function vtApprove() {
     setError("");
     if (!signer || !userAddress) return setError("LINK NODE first.");
@@ -1038,17 +890,16 @@
 
     try {
       el.vt_approve.disabled = true;
-      setStatus(`APPROVING ${tokenSymbol} → Vault ${shortAddr(cfg.tokenVault)}…`, { sonar: true });
+      setStatus(`APPROVING ${tokenSymbol} → Vault ${shortAddr(cfg.tokenVault)}…`);
 
       const tx = await token.approve(cfg.tokenVault, amountWei);
       log(`Vault approve tx: ${tx.hash}`);
       await tx.wait();
 
-      successChime();
-      setStatus("VAULT APPROVE CONFIRMED ✅", { sonar: true });
+      setStatus("VAULT APPROVE CONFIRMED ✅");
       await refreshTelemetry();
     } catch (e) {
-      setError(parseEthersError(e) || "Vault approve failed.");
+      setError(e?.data?.message || e?.message || "Vault approve failed.");
     } finally {
       el.vt_approve.disabled = false;
       updateGuards();
@@ -1083,18 +934,18 @@
     try {
       const allow = await token.allowance(userAddress, cfg.tokenVault);
       if (allow.lt(amountWei)) return setError(`Allowance too low. Approve vault for ${amt} ${tokenSymbol} first.`);
-    } catch { /* ignore */ }
+    } catch {}
 
     try {
       el.vt_create.disabled = true;
-      setStatus("CREATING TOKEN VAULT…", { sonar: true });
+      setStatus("CREATING TOKEN VAULT…");
+      sonarFx();
 
       const tx = await tokenVault.createVault(checksum(taddr), amountWei, vr.accounts, vr.shares, period, safe);
       log(`Create vault tx: ${tx.hash}`);
 
       const receipt = await tx.wait();
       let createdId = null;
-
       for (const ev of (receipt.events || [])) {
         if (ev.event === "VaultCreated" && ev.args && ev.args.vaultId != null) {
           createdId = ev.args.vaultId.toString();
@@ -1102,23 +953,25 @@
         }
       }
 
-      successChime();
       if (createdId != null) {
         el.vt_vaultId.value = createdId;
-        setStatus(`TOKEN VAULT CREATED ✅ (Vault #${createdId})`, { sonar: true });
+        setStatus(`TOKEN VAULT CREATED ✅ (Vault #${createdId})`);
         await vtLoad();
       } else {
-        setStatus("TOKEN VAULT CREATED ✅ (Enter Vault ID then LOAD)", { sonar: true });
+        setStatus("TOKEN VAULT CREATED ✅ (Enter Vault ID then LOAD)");
       }
 
       await refreshTelemetry();
     } catch (e) {
-      setError(parseEthersError(e) || "Create vault failed.");
+      const msg = e?.error?.message || e?.data?.message || e?.reason || e?.message || "Create vault failed.";
+      setError(msg);
     } finally {
       el.vt_create.disabled = false;
       updateGuards();
     }
   }
+
+  function stopVTTimer() { if (timerIntervalVT) clearInterval(timerIntervalVT); timerIntervalVT = null; }
 
   async function vtLoad() {
     setError("");
@@ -1127,9 +980,9 @@
     try {
       const v = await tokenVault.getVault(id);
       startTokenVaultTimer(id, v.heartbeat, v.inactivityPeriod, v.executed, v.frozen);
-      setStatus(`TOKEN VAULT LOADED: #${id}`, { blip: true, sonar: true });
+      setStatus(`TOKEN VAULT LOADED: #${id}`);
     } catch (e) {
-      setError(parseEthersError(e) || "Failed to load vault.");
+      setError(e?.message || "Failed to load vault.");
     }
   }
 
@@ -1162,12 +1015,10 @@
       const tx = await tokenVault.ping(id);
       log(`Ping tx: ${tx.hash}`);
       await tx.wait();
-      successChime();
-      setStatus("PING CONFIRMED ✅", { sonar: true });
+      setStatus("PING CONFIRMED ✅");
       await vtLoad();
-    } catch (e) { setError(parseEthersError(e) || "Ping failed."); }
+    } catch (e) { setError(e?.data?.message || e?.message || "Ping failed."); }
   }
-
   async function vtFreeze() {
     setError("");
     if (!signer) return setError("LINK NODE first.");
@@ -1176,12 +1027,10 @@
       const tx = await tokenVault.freezeVault(id);
       log(`Freeze tx: ${tx.hash}`);
       await tx.wait();
-      successChime();
-      setStatus("FROZEN ✅", { sonar: true });
+      setStatus("FROZEN ✅");
       await vtLoad();
-    } catch (e) { setError(parseEthersError(e) || "Freeze failed."); }
+    } catch (e) { setError(e?.data?.message || e?.message || "Freeze failed."); }
   }
-
   async function vtUnfreeze() {
     setError("");
     if (!signer) return setError("LINK NODE first.");
@@ -1190,36 +1039,32 @@
       const tx = await tokenVault.unfreezeVault(id);
       log(`Unfreeze tx: ${tx.hash}`);
       await tx.wait();
-      successChime();
-      setStatus("UNFROZEN ✅", { sonar: true });
+      setStatus("UNFROZEN ✅");
       await vtLoad();
-    } catch (e) { setError(parseEthersError(e) || "Unfreeze failed."); }
+    } catch (e) { setError(e?.data?.message || e?.message || "Unfreeze failed."); }
   }
-
   async function vtExecuteInheritance() {
     setError("");
     if (!signer) return setError("LINK NODE first.");
     const id = clampInt(el.vt_vaultId.value || "0", 0, 10_000_000);
     try {
+      setStatus("EXECUTING TOKEN VAULT…");
+      sonarFx();
       const tx = await tokenVault.executeInheritance(id);
       log(`ExecuteInheritance tx: ${tx.hash}`);
       await tx.wait();
-      successChime();
-      setStatus("INHERITANCE EXECUTED ✅", { sonar: true });
+      setStatus("INHERITANCE EXECUTED ✅");
       await vtLoad();
       await refreshTelemetry();
     } catch (e) {
-      setError(parseEthersError(e) || "Execute failed.");
+      setError(e?.error?.message || e?.data?.message || e?.reason || e?.message || "Execute failed.");
     }
   }
 
   /***********************
    * NATIVE VAULT
    ***********************/
-  function stopVNTimer() {
-    if (timerIntervalVN) clearInterval(timerIntervalVN);
-    timerIntervalVN = null;
-  }
+  function stopVNTimer() { if (timerIntervalVN) clearInterval(timerIntervalVN); timerIntervalVN = null; }
 
   async function vnCreate() {
     setError("");
@@ -1236,7 +1081,8 @@
 
     try {
       el.vn_create.disabled = true;
-      setStatus("CREATING NATIVE VAULT…", { sonar: true });
+      setStatus("CREATING NATIVE VAULT…");
+      sonarFx();
 
       const tx = await nativeVault.createVault(checksum(execRaw), period, checksum(safeRaw));
       log(`Create native vault tx: ${tx.hash}`);
@@ -1250,19 +1096,17 @@
         }
       }
 
-      successChime();
       if (createdId != null) {
         el.vn_vaultId.value = createdId;
-        setStatus(`NATIVE VAULT CREATED ✅ (Vault #${createdId})`, { sonar: true });
+        setStatus(`NATIVE VAULT CREATED ✅ (Vault #${createdId})`);
         await vnLoad();
       } else {
-        setStatus("NATIVE VAULT CREATED ✅ (Enter Vault ID then LOAD)", { sonar: true });
+        setStatus("NATIVE VAULT CREATED ✅ (Enter Vault ID then LOAD)");
       }
     } catch (e) {
-      setError(parseEthersError(e) || "Create failed.");
+      setError(e?.error?.message || e?.data?.message || e?.reason || e?.message || "Create failed.");
     } finally {
       el.vn_create.disabled = false;
-      updateGuards();
     }
   }
 
@@ -1273,9 +1117,9 @@
     try {
       const v = await nativeVault.getVault(id);
       startNativeVaultTimer(id, v.heartbeat, v.inactivityPeriod, v.executed, v.frozen, v.executor, v.balance);
-      setStatus(`NATIVE VAULT LOADED: #${id}`, { sonar: true });
+      setStatus(`NATIVE VAULT LOADED: #${id}`);
     } catch (e) {
-      setError(parseEthersError(e) || "Failed to load native vault.");
+      setError(e?.message || "Failed to load native vault.");
     }
   }
 
@@ -1314,21 +1158,20 @@
 
     try {
       el.vn_deposit.disabled = true;
-      setStatus("DEPOSITING…", { sonar: true });
+      setStatus("DEPOSITING…");
+      sonarFx();
 
       const tx = await nativeVault.deposit(id, { value: valueWei });
       log(`Deposit tx: ${tx.hash}`);
       await tx.wait();
 
-      successChime();
-      setStatus("DEPOSIT CONFIRMED ✅", { sonar: true });
+      setStatus("DEPOSIT CONFIRMED ✅");
       await vnLoad();
       await refreshTelemetry();
     } catch (e) {
-      setError(parseEthersError(e) || "Deposit failed.");
+      setError(e?.error?.message || e?.data?.message || e?.reason || e?.message || "Deposit failed.");
     } finally {
       el.vn_deposit.disabled = false;
-      updateGuards();
     }
   }
 
@@ -1340,12 +1183,10 @@
       const tx = await nativeVault.ping(id);
       log(`Ping tx: ${tx.hash}`);
       await tx.wait();
-      successChime();
-      setStatus("PING CONFIRMED ✅", { sonar: true });
+      setStatus("PING CONFIRMED ✅");
       await vnLoad();
-    } catch (e) { setError(parseEthersError(e) || "Ping failed."); }
+    } catch (e) { setError(e?.data?.message || e?.message || "Ping failed."); }
   }
-
   async function vnFreeze() {
     setError("");
     if (!signer) return setError("LINK NODE first.");
@@ -1354,12 +1195,10 @@
       const tx = await nativeVault.freeze(id);
       log(`Freeze tx: ${tx.hash}`);
       await tx.wait();
-      successChime();
-      setStatus("FROZEN ✅", { sonar: true });
+      setStatus("FROZEN ✅");
       await vnLoad();
-    } catch (e) { setError(parseEthersError(e) || "Freeze failed."); }
+    } catch (e) { setError(e?.data?.message || e?.message || "Freeze failed."); }
   }
-
   async function vnUnfreeze() {
     setError("");
     if (!signer) return setError("LINK NODE first.");
@@ -1368,26 +1207,25 @@
       const tx = await nativeVault.unfreeze(id);
       log(`Unfreeze tx: ${tx.hash}`);
       await tx.wait();
-      successChime();
-      setStatus("UNFROZEN ✅", { sonar: true });
+      setStatus("UNFROZEN ✅");
       await vnLoad();
-    } catch (e) { setError(parseEthersError(e) || "Unfreeze failed."); }
+    } catch (e) { setError(e?.data?.message || e?.message || "Unfreeze failed."); }
   }
-
   async function vnEmergency() {
     setError("");
     if (!signer) return setError("LINK NODE first.");
     const id = clampInt(el.vn_vaultId.value || "0", 0, 10_000_000);
     try {
+      setStatus("EMERGENCY MOVE…");
+      sonarFx();
       const tx = await nativeVault.emergencyMoveToSafe(id);
       log(`Emergency tx: ${tx.hash}`);
       await tx.wait();
-      successChime();
-      setStatus("EMERGENCY MOVE COMPLETE ✅", { sonar: true });
+      setStatus("EMERGENCY MOVE COMPLETE ✅");
       await vnLoad();
       await refreshTelemetry();
     } catch (e) {
-      setError(parseEthersError(e) || "Emergency failed.");
+      setError(e?.error?.message || e?.data?.message || e?.reason || e?.message || "Emergency failed.");
     }
   }
 
@@ -1401,22 +1239,21 @@
 
     try {
       el.vn_execute.disabled = true;
-      setStatus("EXECUTING NATIVE VAULT…", { sonar: true });
+      setStatus("EXECUTING NATIVE VAULT…");
+      sonarFx();
       coinBeat(vr.accounts.length);
 
       const tx = await nativeVault.execute(id, vr.accounts, vr.shares);
       log(`Execute vault tx: ${tx.hash}`);
       await tx.wait();
 
-      successChime();
-      setStatus("NATIVE VAULT EXECUTED ✅", { sonar: true });
+      setStatus("NATIVE VAULT EXECUTED ✅");
       await vnLoad();
       await refreshTelemetry();
     } catch (e) {
-      setError(parseEthersError(e) || "Execute failed.");
+      setError(e?.error?.message || e?.data?.message || e?.reason || e?.message || "Execute failed.");
     } finally {
       el.vn_execute.disabled = false;
-      updateGuards();
     }
   }
 
@@ -1465,7 +1302,7 @@
           setTab("vault-native");
           await vnLoad();
         }
-        sonarPing();
+        radarBlip();
       };
 
       actions.appendChild(btnLoad);
@@ -1484,12 +1321,12 @@
 
     try {
       el.mv_scan.disabled = true;
-      setStatus(`SCANNING VAULT LOGS (last ${range} blocks)…`, { sonar: true });
+      setStatus(`SCANNING VAULT LOGS (last ${range} blocks)…`);
+      sonarFx();
 
       const latest = await provider.getBlockNumber();
       const fromBlock = Math.max(0, latest - range);
 
-      // TOKEN VAULT scan
       const tokenIface = new ethers.utils.Interface(TOKEN_VAULT_ABI);
       const tokenTopic = tokenIface.getEventTopic("VaultCreated");
 
@@ -1502,10 +1339,12 @@
 
       const tokenIds = [];
       for (const l of tokenLogs) {
-        try { tokenIds.push(tokenIface.parseLog(l).args.vaultId.toString()); } catch {}
+        try {
+          const p = tokenIface.parseLog(l);
+          tokenIds.push(p.args.vaultId.toString());
+        } catch {}
       }
 
-      // NATIVE VAULT scan
       const nativeIface = new ethers.utils.Interface(NATIVE_VAULT_ABI);
       const nativeTopic = nativeIface.getEventTopic("VaultCreated");
 
@@ -1518,10 +1357,13 @@
 
       const nativeIds = [];
       for (const l of nativeLogs) {
-        try { nativeIds.push(nativeIface.parseLog(l).args.vaultId.toString()); } catch {}
+        try {
+          const p = nativeIface.parseLog(l);
+          nativeIds.push(p.args.vaultId.toString());
+        } catch {}
       }
 
-      const uniqSort = (arr) => Array.from(new Set(arr)).sort((a, b) => Number(a) - Number(b));
+      const uniqSort = (arr) => Array.from(new Set(arr)).sort((a,b)=>Number(a)-Number(b));
       const tok = uniqSort(tokenIds);
       const nat = uniqSort(nativeIds);
 
@@ -1533,13 +1375,11 @@
       renderVaultList(el.mv_tokenList, tok, "token");
       renderVaultList(el.mv_nativeList, nat, "native");
 
-      successChime();
-      setStatus("SCAN COMPLETE ✅", { sonar: true });
+      setStatus("SCAN COMPLETE ✅");
     } catch (e) {
-      setError(parseEthersError(e) || "Scan failed.");
+      setError(e?.message || "Scan failed.");
     } finally {
       el.mv_scan.disabled = false;
-      updateGuards();
     }
   }
 
@@ -1577,17 +1417,21 @@
       el.panes[k].style.display = (k === tabKey) ? "block" : "none";
     }
     el.tabs.forEach(t => t.classList.toggle("active", t.dataset.tab === tabKey));
-    el.teleActive.textContent = activeContractForTab();
 
-    if (tabKey === "split-token") el.paneTitle.textContent = "TOKEN SPLIT";
-    if (tabKey === "split-native") el.paneTitle.textContent = "NATIVE SPLIT";
-    if (tabKey === "vault-token") el.paneTitle.textContent = "TOKEN VAULT";
-    if (tabKey === "vault-native") el.paneTitle.textContent = "NATIVE VAULT";
-    if (tabKey === "my-vaults") el.paneTitle.textContent = "MY VAULTS";
+    const full = activeContractForTab();
+    el.teleActive.textContent = full;
+    el.teleActive.title = full;
+    el.teleActive.onclick = () => copyToClipboard(full);
+
+    if (tabKey === "split-token") { el.paneTitle.textContent = "TOKEN SPLIT"; }
+    if (tabKey === "split-native") { el.paneTitle.textContent = "NATIVE SPLIT"; }
+    if (tabKey === "vault-token") { el.paneTitle.textContent = "TOKEN VAULT"; }
+    if (tabKey === "vault-native") { el.paneTitle.textContent = "NATIVE VAULT"; }
+    if (tabKey === "my-vaults") { el.paneTitle.textContent = "MY VAULTS"; }
 
     setError("");
-    setStatus(`TAB: ${tabKey.toUpperCase()}`, { blip: true });
-    refreshTelemetry().catch(() => {});
+    setStatus(`TAB: ${tabKey.toUpperCase()}`);
+    refreshTelemetry().catch(()=>{});
     if (tabKey === "my-vaults") loadCachedVaultsIfAny();
   }
 
@@ -1630,70 +1474,154 @@
   }
 
   /***********************
-   * UNIQUE POLISH (NO UI CHANGE): click-to-copy + smart tap behavior
-   ***********************/
-  function bindCopyTargets() {
-    // make these look/feel interactive without changing layout
-    el.teleActive?.classList.add("copyable");
-    el.feeWalletInline?.classList.add("copyable");
-
-    el.teleActive?.setAttribute("title", "Tap to copy");
-    el.feeWalletInline?.setAttribute("title", "Tap to copy");
-
-    el.teleActive?.addEventListener("click", async () => {
-      const v = el.teleActive.textContent || "";
-      if (!v || v === "—" || v === "Vault Log Scanner") return;
-      const ok = await copyText(v);
-      if (ok) setStatus("COPIED: Active Contract ✅", { blip: true });
-      else setError("Copy failed (clipboard blocked).");
-    });
-
-    el.feeWalletInline?.addEventListener("click", async () => {
-      const ok = await copyText(GLOBAL_FEE_WALLET);
-      if (ok) setStatus("COPIED: Fee Wallet ✅", { blip: true });
-      else setError("Copy failed (clipboard blocked).");
-    });
-  }
-
-  /***********************
    * EVENTS
    ***********************/
   function bindEvents() {
-    // tabs
     el.tabs.forEach(btn => btn.addEventListener("click", () => setTab(btn.dataset.tab)));
 
-    // connect/switch
     el.btnConnect.addEventListener("click", connectWallet);
     el.btnSwitch.addEventListener("click", switchNetwork);
     el.selChain.addEventListener("change", () => { if (provider) switchNetwork(); });
 
-    // telemetry
-    el.btnRefresh.addEventListener("click", () => refreshTelemetry().catch(() => {}));
-    el.btnClear.addEventListener("click", () => {
-      el.log.textContent = "";
-      setError("");
-      setStatus("Log cleared.");
-      sonarPing();
-    });
+    el.btnRefresh.addEventListener("click", refreshTelemetry);
+    el.btnClear.addEventListener("click", () => { el.log.textContent = ""; setError(""); setStatus("Log cleared."); });
     el.btnViewExplorer.addEventListener("click", openExplorer);
 
-    // token loads (debounced)
-    el.st_token.addEventListener("input", () => {
-      const v = el.st_token.value.trim();
-      if (isAddr(v)) scheduleTokenLoad(v);
-    });
-    el.vt_token.addEventListener("input", () => {
-      const v = el.vt_token.value.trim();
-      if (isAddr(v)) scheduleTokenLoad(v);
-    });
+    el.st_token.addEventListener("input", async () => { const v=el.st_token.value.trim(); if (isAddr(v)) await loadToken(v); refreshTelemetry(); });
+    el.vt_token.addEventListener("input", async () => { const v=el.vt_token.value.trim(); if (isAddr(v)) await loadToken(v); refreshTelemetry(); });
 
     el.st_amount.addEventListener("input", updateSplitTokenEstimate);
 
-    // recipients init
     renderRecipients(el.st_recipients, rowsST, el.st_vector, updateGuards);
     renderRecipients(el.sn_recipients, rowsSN, el.sn_vector, updateGuards);
     renderRecipients(el.vt_recipients, rowsVT, el.vt_vector, updateGuards);
     renderRecipients(el.vn_recipients, rowsVN, el.vn_vector, updateGuards);
-...
 
-[Message clipped]  View entire message
+    el.st_add.addEventListener("click", () => { rowsST.push({account:"",share:"10"}); renderRecipients(el.st_recipients, rowsST, el.st_vector, updateGuards); radarBlip(); });
+    el.sn_add.addEventListener("click", () => { rowsSN.push({account:"",share:"10"}); renderRecipients(el.sn_recipients, rowsSN, el.sn_vector, updateGuards); radarBlip(); });
+    el.vt_add.addEventListener("click", () => { rowsVT.push({account:"",share:"10"}); renderRecipients(el.vt_recipients, rowsVT, el.vt_vector, updateGuards); radarBlip(); });
+    el.vn_add.addEventListener("click", () => { rowsVN.push({account:"",share:"10"}); renderRecipients(el.vn_recipients, rowsVN, el.vn_vector, updateGuards); radarBlip(); });
+
+    el.st_normalize.addEventListener("click", () => normalizeModel(rowsST, el.st_recipients, el.st_vector, updateGuards));
+    el.sn_normalize.addEventListener("click", () => normalizeModel(rowsSN, el.sn_recipients, el.sn_vector, updateGuards));
+    el.vt_normalize.addEventListener("click", () => normalizeModel(rowsVT, el.vt_recipients, el.vt_vector, updateGuards));
+    el.vn_normalize.addEventListener("click", () => normalizeModel(rowsVN, el.vn_recipients, el.vn_vector, updateGuards));
+
+    el.st_approve.addEventListener("click", stApprove);
+    el.st_execute.addEventListener("click", stExecute);
+
+    el.sn_max.addEventListener("click", snMaxGasSafe);
+    el.sn_execute.addEventListener("click", snExecute);
+
+    el.vt_approve.addEventListener("click", vtApprove);
+    el.vt_create.addEventListener("click", vtCreate);
+    el.vt_load.addEventListener("click", vtLoad);
+    el.vt_ping.addEventListener("click", vtPing);
+    el.vt_freeze.addEventListener("click", vtFreeze);
+    el.vt_unfreeze.addEventListener("click", vtUnfreeze);
+    el.vt_execute.addEventListener("click", vtExecuteInheritance);
+
+    el.vn_create.addEventListener("click", vnCreate);
+    el.vn_load.addEventListener("click", vnLoad);
+    el.vn_deposit.addEventListener("click", vnDeposit);
+    el.vn_ping.addEventListener("click", vnPing);
+    el.vn_freeze.addEventListener("click", vnFreeze);
+    el.vn_unfreeze.addEventListener("click", vnUnfreeze);
+    el.vn_emergency.addEventListener("click", vnEmergency);
+    el.vn_execute.addEventListener("click", vnExecute);
+
+    el.mv_scan.addEventListener("click", scanVaults);
+
+    if (window.ethereum) {
+      window.ethereum.on("accountsChanged", async (accs) => {
+        setError("");
+        if (!accs || !accs.length) {
+          userAddress = null; signer = null;
+          el.pillWallet.textContent = "NODE: DISCONNECTED";
+          el.btnConnect.textContent = "LINK NODE";
+          el.btnConnect.classList.remove("connected");
+          el.btnConnect.classList.add("gold");
+          el.btnConnect.disabled = false;
+          setStatus("NODE DISCONNECTED.");
+          updateGuards();
+          return;
+        }
+        userAddress = accs[0];
+        el.pillWallet.textContent = `NODE: ${shortAddr(userAddress)}`;
+        setStatus(`NODE CHANGED: ${userAddress}`);
+        await refreshTelemetry();
+        if (activeTab === "my-vaults") loadCachedVaultsIfAny();
+      });
+
+      window.ethereum.on("chainChanged", async () => {
+        try {
+          await ensureProvider();
+          signer = provider.getSigner();
+          await syncChainFromWallet();
+          await initContracts();
+          await refreshTelemetry();
+          setStatus("THEATER CHANGED.");
+          if (activeTab === "my-vaults") loadCachedVaultsIfAny();
+        } catch (e) {
+          setError(e?.message || "Chain change error.");
+        }
+      });
+    }
+  }
+
+  /***********************
+   * BOOT
+   ***********************/
+  async function boot() {
+    try {
+      el.feeWalletInline.textContent = shortAddr(GLOBAL_FEE_WALLET);
+      el.feeWalletInline.title = GLOBAL_FEE_WALLET;
+      el.feeWalletInline.onclick = () => copyToClipboard(GLOBAL_FEE_WALLET);
+
+      el.mv_range.value = "200000";
+
+      bindEvents();
+      setTab("split-token");
+      updateGuards();
+      setStatus("CITADEL v2 ONLINE. LINK NODE to begin.");
+      radarBlip();
+
+      drawRadar();
+
+      if (window.ethereum) {
+        await ensureProvider();
+        const accs = await window.ethereum.request({ method: "eth_accounts" });
+        if (accs && accs.length) {
+          signer = provider.getSigner();
+          userAddress = accs[0];
+
+          el.pillWallet.textContent = `NODE: ${shortAddr(userAddress)}`;
+          el.btnConnect.textContent = "LINKED";
+          el.btnConnect.classList.remove("gold");
+          el.btnConnect.classList.add("connected");
+          el.btnConnect.disabled = true;
+
+          await syncChainFromWallet();
+          await initContracts();
+          await refreshTelemetry();
+          setStatus("AUTO-LINKED ✅");
+          updateGuards();
+        } else {
+          el.pillNet.textContent = `THEATER: ${activeCfg().chainName}`;
+          el.sn_symbol.textContent = activeCfg().nativeSymbol;
+          el.vn_symbol.textContent = activeCfg().nativeSymbol;
+        }
+      } else {
+        setError("MetaMask not detected. Use MetaMask app browser (mobile) or install MetaMask (desktop).");
+      }
+    } catch (e) {
+      setError(e?.message || "Boot error.");
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
+})();
