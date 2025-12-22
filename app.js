@@ -3,56 +3,93 @@
   "use strict";
 
   /***********************
-   * CONFIG (YOUR VERIFIED ADDRESSES)
+   * CONTRACT MAP (YOUR VERIFIED ADDRESSES)
    ***********************/
   const CONTRACTS = {
     bsc: {
       chainId: 56,
       chainIdHex: "0x38",
       chainName: "BNB CHAIN",
-      rpcUrls: ["https://bsc-dataseed.binance.org/"],
       nativeSymbol: "BNB",
       explorer: "https://bscscan.com",
-      splitter: "0x928B75D0fA6382D4B742afB6e500C9458B4f502c",
-      vault: "0x69BD92784b9ED63a40d2cf51b475Ba68B37bD59E",
+      tokenSplitter: "0x928B75D0fA6382D4B742afB6e500C9458B4f502c",
+      tokenVault: "0x69BD92784b9ED63a40d2cf51b475Ba68B37bD59E",
+      nativeSplitter:"0x190304170d78ba5144BFC617187B9e0b3f723F66",
+      nativeVault: "0x7F86efd70c9CbF67d35e6162513DD6D56F8dBFE9",
     },
-    eth: {
+    ethereum: {
       chainId: 1,
       chainIdHex: "0x1",
       chainName: "ETHEREUM",
-      rpcUrls: ["https://cloudflare-eth.com"],
       nativeSymbol: "ETH",
       explorer: "https://etherscan.io",
-      splitter: "0x56FeE96eF295Cf282490592403B9A3C1304b91d2",
-      vault: "0x886f915D21A5BC540E86655a89e6223981D875d8",
+      tokenSplitter: "0x56FeE96eF295Cf282490592403B9A3C1304b91d2",
+      tokenVault: "0x798b4620d29cb6f1d4bFdA88D4537769E2BDdD47",
+      nativeSplitter:"0xBcd7C5054522bf0A6DB5a63Fa2513a428e70b0FD",
+      nativeVault: "0xB0b6b555d37220611e6d3d8c0DB6eC0C0b9A81Fc",
     },
     polygon: {
       chainId: 137,
       chainIdHex: "0x89",
       chainName: "POLYGON",
-      rpcUrls: ["https://polygon-rpc.com"],
       nativeSymbol: "MATIC",
       explorer: "https://polygonscan.com",
-      splitter: "0x05948E68137eC131E1f0E27028d09fa174679ED4",
-      vault: "0xde07160A2eC236315Dd27e9600f88Ba26F86f06e",
+      tokenSplitter: "0x05948E68137eC131E1f0E27028d09fa174679ED4",
+      tokenVault: "0xde07160A2eC236315Dd27e9600f88Ba26F86f06e",
+      // You confirmed the D01a one is NOT used. Using your v2 native splitter:
+      nativeSplitter:"0xe59bd693661bB4201C1E91EB7b2A88E525C4cB99",
+      nativeVault: "0xEB3992D48964783FC6B9c9881DfF67cC91ce2b4F",
     },
   };
 
   /***********************
    * ABIs (MINIMAL)
    ***********************/
-  const SPLITTER_ABI = [
-    "function feeBps() view returns (uint16)",
-    "function feeWallet() view returns (address)",
-    "function depositAndDistribute(address token, address[] accounts, uint256[] shares, uint256 amount) external",
-  ];
-
   const ERC20_ABI = [
     "function symbol() view returns (string)",
     "function decimals() view returns (uint8)",
     "function balanceOf(address) view returns (uint256)",
     "function allowance(address owner, address spender) view returns (uint256)",
     "function approve(address spender, uint256 amount) returns (bool)",
+  ];
+
+  // ZephFlexSplitter
+  const TOKEN_SPLITTER_ABI = [
+    "function feeBps() view returns (uint16)",
+    "function feeWallet() view returns (address)",
+    "function depositAndDistribute(address token, address[] accounts, uint256[] shares, uint256 amount) external",
+  ];
+
+  // ZephNativeSplitter
+  const NATIVE_SPLITTER_ABI = [
+    "function feeBps() view returns (uint16)",
+    "function feeWallet() view returns (address)",
+    "function distributeNative(address[] accounts, uint256[] shares) external payable",
+  ];
+
+  // ZephInheritanceVault (token)
+  const TOKEN_VAULT_ABI = [
+    "function feeBps() view returns (uint16)",
+    "function feeWallet() view returns (address)",
+    "function createVault(address token, uint256 amount, address[] recipients, uint256[] shares, uint64 inactivityPeriodSeconds, address safeWallet) external returns (uint256 vaultId)",
+    "function ping(uint256 vaultId) external",
+    "function freezeVault(uint256 vaultId) external",
+    "function unfreezeVault(uint256 vaultId) external",
+    "function executeInheritance(uint256 vaultId) external",
+    "function getVault(uint256 vaultId) view returns (tuple(address owner,address token,address[] recipients,uint256[] shares,uint256 totalAmount,uint64 heartbeat,uint64 inactivityPeriod,bool frozen,bool executed,address safeWallet))",
+  ];
+
+  // ZephNativeInheritanceVault (native)
+  const NATIVE_VAULT_ABI = [
+    "function nativeSplitter() view returns (address)",
+    "function createVault(address executor, uint64 inactivityPeriodSeconds, address safeWallet) external returns (uint256 vaultId)",
+    "function deposit(uint256 vaultId) external payable",
+    "function ping(uint256 vaultId) external",
+    "function freeze(uint256 vaultId) external",
+    "function unfreeze(uint256 vaultId) external",
+    "function emergencyMoveToSafe(uint256 vaultId) external",
+    "function execute(uint256 vaultId, address[] accounts, uint256[] shares) external",
+    "function getVault(uint256 vaultId) view returns (tuple(address owner,address executor,address safeWallet,uint64 heartbeat,uint64 inactivityPeriod,bool frozen,bool executed,uint256 balance))",
   ];
 
   /***********************
@@ -65,57 +102,98 @@
     pillWallet: $("pillWallet"),
     btnSwitch: $("btnSwitch"),
     btnConnect: $("btnConnect"),
-    btnToggleOps: $("btnToggleOps"),
     selChain: $("selChain"),
-    selMode: $("selMode"),
-    modeHint: $("modeHint"),
 
-    tokenBlock: $("tokenBlock"),
-    inpToken: $("inpToken"),
-    inpAmount: $("inpAmount"),
-    btnMax: $("btnMax"),
-    btnNormalize: $("btnNormalize"),
-
-    usdEst: $("usdEst"),
-    postFeeLine: $("postFeeLine"),
-    gasHint: $("gasHint"),
-
-    recipients: $("recipients"),
-    totalPill: $("totalPill"),
-    btnAdd: $("btnAdd"),
-
-    btnApprove: $("btnApprove"),
-    btnExecute: $("btnExecute"),
-
-    tipBox: $("tipBox"),
-    errBox: $("errBox"),
-
+    chkOperator: $("chkOperator"),
     chkSound: $("chkSound"),
 
+    tabs: Array.from(document.querySelectorAll(".tab")),
+    panes: {
+      "split-token": $("pane-split-token"),
+      "split-native": $("pane-split-native"),
+      "vault-token": $("pane-vault-token"),
+      "vault-native": $("pane-vault-native"),
+    },
+
+    // telemetry + log
     teleNative: $("teleNative"),
     teleSymbol: $("teleSymbol"),
     teleDecimals: $("teleDecimals"),
     teleTokenBal: $("teleTokenBal"),
     teleAllowance: $("teleAllowance"),
-    teleSplitter: $("teleSplitter"),
+    teleActive: $("teleActive"),
     teleFee: $("teleFee"),
     teleStatus: $("teleStatus"),
-
-    btnAddToken: $("btnAddToken"),
-    btnViewTx: $("btnViewTx"),
-    debrief: $("debrief"),
-
     btnRefresh: $("btnRefresh"),
     btnClear: $("btnClear"),
     log: $("log"),
+    errBox: $("errBox"),
 
-    // modal
-    modal: $("modal"),
-    modalBody: $("modalBody"),
-    btnModalClose: $("btnModalClose"),
-    btnModalBack: $("btnModalBack"),
-    btnModalConfirm: $("btnModalConfirm"),
-    chkAcknowledge: $("chkAcknowledge"),
+    // labels on native tabs
+    sn_symbol: $("sn_symbol"),
+    vn_symbol: $("vn_symbol"),
+
+    // token split
+    st_token: $("st_token"),
+    st_amount: $("st_amount"),
+    st_usd: $("st_usd"),
+    st_postFee: $("st_postFee"),
+    st_feeTiny: $("st_feeTiny"),
+    st_vector: $("st_vector"),
+    st_recipients: $("st_recipients"),
+    st_add: $("st_add"),
+    st_normalize: $("st_normalize"),
+    st_approve: $("st_approve"),
+    st_execute: $("st_execute"),
+
+    // native split
+    sn_amount: $("sn_amount"),
+    sn_max: $("sn_max"),
+    sn_maxHint: $("sn_maxHint"),
+    sn_vector: $("sn_vector"),
+    sn_recipients: $("sn_recipients"),
+    sn_add: $("sn_add"),
+    sn_normalize: $("sn_normalize"),
+    sn_execute: $("sn_execute"),
+
+    // token vault
+    vt_token: $("vt_token"),
+    vt_amount: $("vt_amount"),
+    vt_period: $("vt_period"),
+    vt_safe: $("vt_safe"),
+    vt_vector: $("vt_vector"),
+    vt_recipients: $("vt_recipients"),
+    vt_add: $("vt_add"),
+    vt_normalize: $("vt_normalize"),
+    vt_approve: $("vt_approve"),
+    vt_create: $("vt_create"),
+    vt_vaultId: $("vt_vaultId"),
+    vt_load: $("vt_load"),
+    vt_timerBox: $("vt_timerBox"),
+    vt_ping: $("vt_ping"),
+    vt_freeze: $("vt_freeze"),
+    vt_unfreeze: $("vt_unfreeze"),
+    vt_execute: $("vt_execute"),
+
+    // native vault
+    vn_executor: $("vn_executor"),
+    vn_period: $("vn_period"),
+    vn_safe: $("vn_safe"),
+    vn_create: $("vn_create"),
+    vn_vaultId: $("vn_vaultId"),
+    vn_load: $("vn_load"),
+    vn_depositAmt: $("vn_depositAmt"),
+    vn_deposit: $("vn_deposit"),
+    vn_ping: $("vn_ping"),
+    vn_freeze: $("vn_freeze"),
+    vn_unfreeze: $("vn_unfreeze"),
+    vn_emergency: $("vn_emergency"),
+    vn_vector: $("vn_vector"),
+    vn_recipients: $("vn_recipients"),
+    vn_add: $("vn_add"),
+    vn_normalize: $("vn_normalize"),
+    vn_execute: $("vn_execute"),
+    vn_timerBox: $("vn_timerBox"),
   };
 
   /***********************
@@ -124,62 +202,63 @@
   let provider = null;
   let signer = null;
   let userAddress = null;
-  let currentChainKey = "bsc";
-  let splitter = null;
 
+  let currentKey = "bsc";
+  let activeTab = "split-token";
+
+  // contracts
+  let tokenSplitter = null;
+  let nativeSplitter = null;
+  let tokenVault = null;
+  let nativeVault = null;
+
+  // token context
   let token = null;
   let tokenAddr = null;
-  let tokenDecimals = 18;
   let tokenSymbol = "—";
+  let tokenDecimals = 18;
+
+  // fee
   let feeBps = 100;
   let feeWallet = null;
 
-  let lastTxHash = null;
-  let lastExplorerLink = null;
+  // recipients models per module
+  let rowsST = [{ account: "", share: "50" }, { account: "", share: "50" }];
+  let rowsSN = [{ account: "", share: "50" }, { account: "", share: "50" }];
+  let rowsVT = [{ account: "", share: "50" }, { account: "", share: "50" }];
+  let rowsVN = [{ account: "", share: "50" }, { account: "", share: "50" }];
 
-  let operatorMode = false; // UI only
-
-  // recipients model
-  let rows = [
-    { account: "", share: "50" },
-    { account: "", share: "50" },
-  ];
+  // timers
+  let timerInterval = null;
 
   /***********************
-   * LOGGING + UI HELPERS
+   * HELPERS
    ***********************/
   function log(line) {
     const ts = new Date().toLocaleTimeString();
     el.log.textContent = `[${ts}] ${line}\n` + el.log.textContent;
   }
-
+  function setStatus(msg) {
+    el.teleStatus.textContent = msg;
+    log(msg);
+  }
   function setError(msg) {
     el.errBox.style.display = msg ? "block" : "none";
     el.errBox.textContent = msg || "";
     if (msg) log(`ERROR: ${msg}`);
   }
-
-  function setStatus(msg) {
-    el.teleStatus.textContent = msg;
-    log(msg);
-  }
-
   function shortAddr(a) {
     if (!a || a.length < 10) return a || "—";
     return `${a.slice(0, 6)}…${a.slice(-4)}`;
   }
-
   function isAddr(a) {
-    try {
-      return ethers.utils.isAddress(a);
-    } catch {
-      return false;
-    }
+    try { return ethers.utils.isAddress(a); } catch { return false; }
   }
+  function checksum(a) { return ethers.utils.getAddress(a); }
 
-  function toBN(val) {
-    return ethers.BigNumber.from(val.toString());
-  }
+  function activeCfg() { return CONTRACTS[currentKey]; }
+
+  function toBN(n) { return ethers.BigNumber.from(String(n)); }
 
   function clampInt(n, min, max) {
     n = Math.floor(Number(n));
@@ -187,52 +266,32 @@
     return Math.max(min, Math.min(max, n));
   }
 
-  function activeCfg() {
-    return CONTRACTS[currentChainKey];
+  function nowSec() { return Math.floor(Date.now() / 1000); }
+
+  function fmtCountdown(seconds) {
+    const s = Math.max(0, Number(seconds) || 0);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const ss = Math.floor(s % 60);
+    if (h > 0) return `${h}h ${m}m ${ss}s`;
+    if (m > 0) return `${m}m ${ss}s`;
+    return `${ss}s`;
   }
 
-  function cfgNativeSymbol() {
-    return activeCfg()?.nativeSymbol || "NATIVE";
-  }
-
-  function setDebrief(html) {
-    el.debrief.style.display = html ? "block" : "none";
-    el.debrief.innerHTML = html || "";
-  }
-
-  /***********************
-   * Operator Console (UI only)
-   ***********************/
-  function applyOperatorMode(on) {
-    operatorMode = !!on;
-    const body = document.body;
-
-    if (operatorMode) {
-      body.classList.remove("simple");
-      body.classList.add("operator");
-      if (el.btnToggleOps) el.btnToggleOps.textContent = "OPERATOR: ON";
-      log("Operator console enabled.");
-    } else {
-      body.classList.remove("operator");
-      body.classList.add("simple");
-      if (el.btnToggleOps) el.btnToggleOps.textContent = "OPERATOR: OFF";
-      log("Operator console disabled.");
-    }
-
-    try { localStorage.setItem("ZC_OPS", operatorMode ? "1" : "0"); } catch {}
+  function fmtLocalTimeFromUnix(sec) {
+    if (!sec) return "—";
+    return new Date(sec * 1000).toLocaleString();
   }
 
   /***********************
    * SOUND FX
    ***********************/
   let audioCtx = null;
-
   function ensureAudio() {
     if (!el.chkSound?.checked) return null;
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     return audioCtx;
   }
-
   function beep({ freq = 880, dur = 0.08, type = "sine", gain = 0.12 } = {}) {
     const ctx = ensureAudio();
     if (!ctx) return;
@@ -241,140 +300,70 @@
     o.type = type;
     o.frequency.value = freq;
     g.gain.value = gain;
-    o.connect(g);
-    g.connect(ctx.destination);
-    o.start();
-    o.stop(ctx.currentTime + dur);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime + dur);
   }
-
   function radarPing() {
     beep({ freq: 220, dur: 0.05, type: "triangle", gain: 0.10 });
     setTimeout(() => beep({ freq: 440, dur: 0.06, type: "triangle", gain: 0.10 }), 70);
     setTimeout(() => beep({ freq: 880, dur: 0.07, type: "triangle", gain: 0.10 }), 150);
   }
-
-  function coinClink(i = 0) {
-    const base = 520 + i * 35;
-    beep({ freq: base, dur: 0.05, type: "square", gain: 0.05 });
-    setTimeout(() => beep({ freq: base * 1.5, dur: 0.04, type: "square", gain: 0.04 }), 35);
-  }
-
   function coinBeat(count) {
     const n = clampInt(count, 1, 24);
-    for (let i = 0; i < n; i++) setTimeout(() => coinClink(i), i * 110);
-  }
-
-  /***********************
-   * RECIPIENTS UI
-   ***********************/
-  function renderRecipients() {
-    el.recipients.innerHTML = "";
-
-    rows.forEach((r, idx) => {
-      const wrap = document.createElement("div");
-      wrap.className = "row";
-
-      const inpA = document.createElement("input");
-      inpA.placeholder = "0xTARGET…";
-      inpA.spellcheck = false;
-      inpA.value = r.account || "";
-      inpA.addEventListener("input", () => {
-        rows[idx].account = inpA.value.trim();
-        updateTotals();
-        updateActionGuards();
-      });
-
-      const inpS = document.createElement("input");
-      inpS.placeholder = "50";
-      inpS.inputMode = "numeric";
-      inpS.value = r.share || "";
-      inpS.addEventListener("input", () => {
-        rows[idx].share = inpS.value.trim();
-        updateTotals();
-        updateActionGuards();
-      });
-
-      const btnX = document.createElement("button");
-      btnX.className = "btn ghost";
-      btnX.textContent = "×";
-      btnX.style.padding = "10px 0";
-      btnX.addEventListener("click", () => {
-        if (rows.length <= 2) return;
-        rows.splice(idx, 1);
-        renderRecipients();
-        updateTotals();
-        updateActionGuards();
-      });
-
-      wrap.appendChild(inpA);
-      wrap.appendChild(inpS);
-      wrap.appendChild(btnX);
-      el.recipients.appendChild(wrap);
-    });
-
-    updateTotals();
-    updateActionGuards();
-  }
-
-  function normalizeShares() {
-    const nums = rows.map((r) => Number(r.share || 0)).map((n) => (Number.isFinite(n) ? n : 0));
-    const sum = nums.reduce((a, b) => a + b, 0);
-    if (sum <= 0) return setError("Allocation Vector must be > 0.");
-
-    let scaled = nums.map((n) => Math.floor((n / sum) * 100));
-    let s2 = scaled.reduce((a, b) => a + b, 0);
-    scaled[scaled.length - 1] += 100 - s2;
-
-    rows = rows.map((r, i) => ({ ...r, share: String(Math.max(1, scaled[i])) }));
-    renderRecipients();
-    setError("");
-  }
-
-  function updateTotals() {
-    const nums = rows.map((r) => Number(r.share || 0)).map((n) => (Number.isFinite(n) ? n : 0));
-    const sum = nums.reduce((a, b) => a + b, 0);
-    el.totalPill.textContent = `VECTOR: ${sum || 0}`;
-  }
-
-  function validateRecipients() {
-    const accounts = [];
-    const shares = [];
-
-    for (let i = 0; i < rows.length; i++) {
-      const a = (rows[i].account || "").trim();
-      const s = (rows[i].share || "").trim();
-
-      if (!isAddr(a)) return { ok: false, msg: `Target #${i + 1} address invalid.` };
-      const n = Number(s);
-      if (!Number.isFinite(n) || n <= 0) return { ok: false, msg: `Target #${i + 1} vector must be > 0.` };
-
-      accounts.push(ethers.utils.getAddress(a));
-      shares.push(toBN(Math.floor(n)));
+    for (let i = 0; i < n; i++) {
+      setTimeout(() => {
+        const base = 520 + i * 35;
+        beep({ freq: base, dur: 0.05, type: "square", gain: 0.05 });
+        setTimeout(() => beep({ freq: base * 1.5, dur: 0.04, type: "square", gain: 0.04 }), 35);
+      }, i * 110);
     }
-
-    const lower = accounts.map((x) => x.toLowerCase());
-    const set = new Set(lower);
-    if (set.size !== accounts.length) return { ok: false, msg: "Duplicate targets detected." };
-    if (set.size === 1) return { ok: false, msg: "All targets resolve to the same address." };
-
-    return { ok: true, accounts, shares };
   }
 
   /***********************
-   * CHAIN + WALLET
+   * WALLET / NETWORK
    ***********************/
   async function ensureProvider() {
     if (!window.ethereum) {
-      setError("MetaMask not detected. Install MetaMask extension, then refresh.");
-      throw new Error("No ethereum provider");
+      throw new Error("No wallet provider detected. Install MetaMask and refresh.");
     }
     provider = new ethers.providers.Web3Provider(window.ethereum, "any");
     return provider;
   }
 
-  function lockSupportedChainOrThrow(chainId) {
-    if (![56, 1, 137].includes(chainId)) {
-      throw new Error("Unsupported network. Switch to BNB Chain, Ethereum, or Polygon.");
+  function chainKeyFromId(chainId) {
+    if (chainId === 56) return "bsc";
+    if (chainId === 1) return "ethereum";
+    if (chainId === 137) return "polygon";
+    return null;
+  }
+
+  async function syncChainFromWallet() {
+    const net = await provider.getNetwork();
+    const key = chainKeyFromId(net.chainId);
+    if (!key) throw new Error("Unsupported network. Use BNB, Ethereum, or Polygon.");
+    currentKey = key;
+    el.selChain.value = currentKey;
+    el.pillNet.textContent = `THEATER: ${activeCfg().chainName} (chainId ${net.chainId})`;
+    el.sn_symbol.textContent = activeCfg().nativeSymbol;
+    el.vn_symbol.textContent = activeCfg().nativeSymbol;
+  }
+
+  async function switchNetwork() {
+    setError("");
+    await ensureProvider();
+    const cfg = CONTRACTS[el.selChain.value];
+
+    try {
+      await window.ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: cfg.chainIdHex }],
+      });
+      currentKey = el.selChain.value;
+      await initContracts();
+      await refreshTelemetry();
+      setStatus(`THEATER SWITCHED → ${cfg.chainName}`);
+    } catch (err) {
+      setError(err?.message || "Network switch failed.");
     }
   }
 
@@ -382,152 +371,67 @@
     setError("");
     await ensureProvider();
 
-    try {
-      await window.ethereum.request({ method: "eth_requestAccounts" });
-      signer = provider.getSigner();
-      userAddress = await signer.getAddress();
+    await window.ethereum.request({ method: "eth_requestAccounts" });
+    signer = provider.getSigner();
+    userAddress = await signer.getAddress();
 
-      el.pillWallet.textContent = `NODE: ${shortAddr(userAddress)}`;
-      el.btnConnect.textContent = "LINKED";
-      el.btnConnect.classList.remove("gold");
-      el.btnConnect.classList.add("connected");
-      el.btnConnect.disabled = true;
+    el.pillWallet.textContent = `NODE: ${shortAddr(userAddress)}`;
+    el.btnConnect.textContent = "LINKED";
+    el.btnConnect.classList.remove("gold");
+    el.btnConnect.classList.add("connected");
+    el.btnConnect.disabled = true;
 
-      radarPing();
-      log(`WALLET CONNECTED ✅ ${userAddress}`);
-      setStatus(`NODE LINKED: ${userAddress}`);
+    radarPing();
+    setStatus(`NODE LINKED: ${userAddress}`);
 
-      await syncChainFromWallet();
-      await initContracts();
-      await refreshTelemetry();
-      updateActionGuards();
-    } catch (e) {
-      setError(e?.message || "Wallet connection failed.");
-      throw e;
-    }
-  }
-
-  async function syncChainFromWallet() {
-    const net = await provider.getNetwork();
-    lockSupportedChainOrThrow(net.chainId);
-
-    if (net.chainId === 56) currentChainKey = "bsc";
-    else if (net.chainId === 1) currentChainKey = "eth";
-    else if (net.chainId === 137) currentChainKey = "polygon";
-
-    el.selChain.value = currentChainKey;
-    el.pillNet.textContent = `THEATER: ${activeCfg().chainName} (chainId ${net.chainId})`;
-    log(`NETWORK ✅ ${activeCfg().chainName} chainId=${net.chainId}`);
-  }
-
-  async function switchNetwork() {
-    setError("");
-    await ensureProvider();
-
-    const key = el.selChain.value;
-    const cfg = CONTRACTS[key];
-
-    try {
-      await window.ethereum.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: cfg.chainIdHex }],
-      });
-      currentChainKey = key;
-      await initContracts();
-      await refreshTelemetry();
-      updateActionGuards();
-      setStatus(`THEATER SWITCHED → ${cfg.chainName}`);
-    } catch (err) {
-      if (err?.code === 4902) {
-        try {
-          await window.ethereum.request({
-            method: "wallet_addEthereumChain",
-            params: [
-              {
-                chainId: cfg.chainIdHex,
-                chainName: cfg.chainName,
-                nativeCurrency: { name: cfg.nativeSymbol, symbol: cfg.nativeSymbol, decimals: 18 },
-                rpcUrls: cfg.rpcUrls,
-                blockExplorerUrls: [cfg.explorer],
-              },
-            ],
-          });
-          currentChainKey = key;
-          await initContracts();
-          await refreshTelemetry();
-          updateActionGuards();
-          setStatus(`THEATER ADDED + SWITCHED → ${cfg.chainName}`);
-          return;
-        } catch (e2) {
-          setError(e2?.message || "Failed to add chain.");
-          return;
-        }
-      }
-      setError(err?.message || "Network switch failed.");
-    }
+    await syncChainFromWallet();
+    await initContracts();
+    await refreshTelemetry();
+    updateGuards();
   }
 
   async function initContracts() {
-    if (!provider) return;
-
     const cfg = activeCfg();
-    splitter = new ethers.Contract(cfg.splitter, SPLITTER_ABI, signer || provider);
+    tokenSplitter = new ethers.Contract(cfg.tokenSplitter, TOKEN_SPLITTER_ABI, signer || provider);
+    nativeSplitter = new ethers.Contract(cfg.nativeSplitter, NATIVE_SPLITTER_ABI, signer || provider);
+    tokenVault = new ethers.Contract(cfg.tokenVault, TOKEN_VAULT_ABI, signer || provider);
+    nativeVault = new ethers.Contract(cfg.nativeVault, NATIVE_VAULT_ABI, signer || provider);
 
-    el.teleSplitter.textContent = cfg.splitter;
-
+    // fee policy shown from whichever pane is active, but we keep it consistent:
+    // Token Splitter fee
     try {
-      feeBps = Number(await splitter.feeBps());
+      feeBps = Number(await tokenSplitter.feeBps());
+      feeWallet = await tokenSplitter.feeWallet();
     } catch {
       feeBps = 100;
-    }
-
-    try {
-      feeWallet = await splitter.feeWallet();
-    } catch {
       feeWallet = null;
     }
-
     const feePct = (feeBps / 100).toFixed(2).replace(/\.00$/, "");
-    document.querySelectorAll(".feeTiny").forEach((n) => (n.textContent = `${feePct}%`));
+    el.st_feeTiny.textContent = `${feePct}%`;
     el.teleFee.textContent = `${feePct}% → ${feeWallet ? shortAddr(feeWallet) : "feeWallet"}`;
 
-    setStatus(`SPLITTER ONLINE. feeBps=${feeBps}`);
-    log(`SPLITTER READY ✅ ${cfg.splitter}`);
+    setStatus("CONTRACT ROUTER ONLINE.");
   }
 
   /***********************
    * TOKEN LOAD + TELEMETRY
    ***********************/
   async function loadToken(address) {
-    setError("");
     if (!isAddr(address)) {
-      token = null;
-      tokenAddr = null;
-      tokenDecimals = 18;
-      tokenSymbol = "—";
+      token = null; tokenAddr = null; tokenSymbol = "—"; tokenDecimals = 18;
       el.teleSymbol.textContent = "—";
       el.teleDecimals.textContent = "—";
       el.teleTokenBal.textContent = "—";
       el.teleAllowance.textContent = "—";
-      updateActionGuards();
       return;
     }
-
-    tokenAddr = ethers.utils.getAddress(address);
-
-    // KEEP YOUR WORKING PATTERN: signer for write
-    const base = new ethers.Contract(tokenAddr, ERC20_ABI, signer || provider);
-    token = signer ? base.connect(signer) : base;
-
+    tokenAddr = checksum(address);
+    token = new ethers.Contract(tokenAddr, ERC20_ABI, signer || provider);
     try { tokenSymbol = await token.symbol(); } catch { tokenSymbol = "TOKEN"; }
     try { tokenDecimals = Number(await token.decimals()); } catch { tokenDecimals = 18; }
-
     el.teleSymbol.textContent = tokenSymbol;
     el.teleDecimals.textContent = String(tokenDecimals);
-
-    setStatus(`ASSET LOADED: ${tokenSymbol} (decimals ${tokenDecimals})`);
-    log(`TOKEN LOADED ✅ ${tokenSymbol} decimals=${tokenDecimals}`);
-    updateActionGuards();
+    setStatus(`ASSET LOADED: ${tokenSymbol} (${tokenDecimals} decimals)`);
   }
 
   async function refreshTelemetry() {
@@ -542,412 +446,801 @@
       return;
     }
 
+    // native balance
     try {
-      const bal = await provider.getBalance(userAddress);
-      el.teleNative.textContent = `${ethers.utils.formatEther(bal)} ${cfg.nativeSymbol}`;
+      const b = await provider.getBalance(userAddress);
+      el.teleNative.textContent = `${ethers.utils.formatEther(b)} ${cfg.nativeSymbol}`;
     } catch {
       el.teleNative.textContent = "—";
     }
 
+    // active contract shown per tab
+    el.teleActive.textContent = activeContractForTab();
+
+    // token-specific telemetry when token exists
     if (token && tokenAddr) {
       try {
         const tb = await token.balanceOf(userAddress);
         el.teleTokenBal.textContent = `${ethers.utils.formatUnits(tb, tokenDecimals)} ${tokenSymbol}`;
-      } catch {
-        el.teleTokenBal.textContent = "—";
-      }
+      } catch { el.teleTokenBal.textContent = "—"; }
+
+      // allowance depends on feature:
+      // token split uses spender = tokenSplitter
+      // token vault uses spender = tokenVault
+      let spender = activeTab === "vault-token" ? cfg.tokenVault : cfg.tokenSplitter;
 
       try {
-        const allow = await token.allowance(userAddress, cfg.splitter);
-        el.teleAllowance.textContent = `${ethers.utils.formatUnits(allow, tokenDecimals)} ${tokenSymbol}`;
-      } catch {
-        el.teleAllowance.textContent = "—";
-      }
+        const al = await token.allowance(userAddress, spender);
+        el.teleAllowance.textContent = `${ethers.utils.formatUnits(al, tokenDecimals)} ${tokenSymbol}`;
+      } catch { el.teleAllowance.textContent = "—"; }
     }
 
-    updateEstimate();
-    updateActionGuards();
+    updateSplitTokenEstimate();
+    updateGuards();
   }
 
-  function updateEstimate() {
-    const mode = el.selMode.value;
-    const raw = (el.inpAmount.value || "").trim();
+  function activeContractForTab() {
+    const cfg = activeCfg();
+    if (activeTab === "split-token") return cfg.tokenSplitter;
+    if (activeTab === "split-native") return cfg.nativeSplitter;
+    if (activeTab === "vault-token") return cfg.tokenVault;
+    if (activeTab === "vault-native") return cfg.nativeVault;
+    return "—";
+  }
+
+  /***********************
+   * RECIPIENT RENDERERS
+   ***********************/
+  function renderRecipients(container, model, vectorEl, onChange) {
+    container.innerHTML = "";
+
+    model.forEach((r, idx) => {
+      const wrap = document.createElement("div");
+      wrap.className = "row";
+
+      const inpA = document.createElement("input");
+      inpA.placeholder = "0xTARGET…";
+      inpA.spellcheck = false;
+      inpA.value = r.account || "";
+      inpA.addEventListener("input", () => {
+        model[idx].account = inpA.value.trim();
+        updateVector(vectorEl, model);
+        onChange?.();
+      });
+
+      const inpS = document.createElement("input");
+      inpS.placeholder = "50";
+      inpS.inputMode = "numeric";
+      inpS.value = r.share || "";
+      inpS.addEventListener("input", () => {
+        model[idx].share = inpS.value.trim();
+        updateVector(vectorEl, model);
+        onChange?.();
+      });
+
+      const btnX = document.createElement("button");
+      btnX.className = "btn ghost";
+      btnX.textContent = "×";
+      btnX.style.padding = "10px 0";
+      btnX.addEventListener("click", () => {
+        if (model.length <= 2) return;
+        model.splice(idx, 1);
+        renderRecipients(container, model, vectorEl, onChange);
+        updateVector(vectorEl, model);
+        onChange?.();
+      });
+
+      wrap.appendChild(inpA);
+      wrap.appendChild(inpS);
+      wrap.appendChild(btnX);
+      container.appendChild(wrap);
+    });
+
+    updateVector(vectorEl, model);
+  }
+
+  function updateVector(vectorEl, model) {
+    const nums = model.map(x => Number(x.share || 0)).map(n => (Number.isFinite(n) ? n : 0));
+    const sum = nums.reduce((a,b)=>a+b,0);
+    vectorEl.textContent = `VECTOR: ${sum || 0}`;
+  }
+
+  function normalizeModel(model, container, vectorEl, onChange) {
+    const nums = model.map(x => Number(x.share || 0)).map(n => (Number.isFinite(n) ? n : 0));
+    const sum = nums.reduce((a,b)=>a+b,0);
+    if (sum <= 0) return setError("Vector must be > 0.");
+    let scaled = nums.map(n => Math.floor((n / sum) * 100));
+    let s2 = scaled.reduce((a,b)=>a+b,0);
+    scaled[scaled.length - 1] += (100 - s2);
+    for (let i=0;i<model.length;i++) model[i].share = String(Math.max(1, scaled[i]));
+    renderRecipients(container, model, vectorEl, onChange);
+    setError("");
+  }
+
+  function validateRecipients(model) {
+    const accounts = [];
+    const shares = [];
+    for (let i=0;i<model.length;i++) {
+      const a = (model[i].account || "").trim();
+      const s = (model[i].share || "").trim();
+      if (!isAddr(a)) return { ok:false, msg:`Target #${i+1} address invalid.` };
+      const n = Number(s);
+      if (!Number.isFinite(n) || n <= 0) return { ok:false, msg:`Target #${i+1} share must be > 0.` };
+      accounts.push(checksum(a));
+      shares.push(toBN(Math.floor(n)));
+    }
+    const lowers = accounts.map(x=>x.toLowerCase());
+    const set = new Set(lowers);
+    if (set.size !== accounts.length) return { ok:false, msg:"Duplicate targets detected." };
+    if (set.size === 1) return { ok:false, msg:"All targets resolve to the same address." };
+    return { ok:true, accounts, shares };
+  }
+
+  /***********************
+   * TOKEN SPLIT (approve + execute)
+   ***********************/
+  async function stApprove() {
+    setError("");
+    if (!signer || !userAddress) return setError("LINK NODE first.");
+    const cfg = activeCfg();
+
+    const taddr = (el.st_token.value || "").trim();
+    if (!isAddr(taddr)) return setError("Enter a valid token address.");
+    await loadToken(taddr);
+
+    const amt = (el.st_amount.value || "").trim();
+    const num = Number(amt);
+    if (!amt || !Number.isFinite(num) || num <= 0) return setError("Enter a valid amount.");
+
+    const vr = validateRecipients(rowsST);
+    if (!vr.ok) return setError(vr.msg);
+
+    const amountWei = ethers.utils.parseUnits(amt, tokenDecimals);
+
+    try {
+      el.st_approve.disabled = true;
+      setStatus(`APPROVING ${tokenSymbol} → Splitter ${shortAddr(cfg.tokenSplitter)}…`);
+
+      // IMPORTANT: spender is the TOKEN SPLITTER (not token, not vault)
+      const tx = await token.approve(cfg.tokenSplitter, amountWei);
+      log(`Approve tx: ${tx.hash}`);
+      await tx.wait();
+
+      setStatus("APPROVE CONFIRMED ✅");
+      await refreshTelemetry();
+    } catch (e) {
+      setError(e?.data?.message || e?.message || "Approve failed.");
+    } finally {
+      el.st_approve.disabled = false;
+      updateGuards();
+    }
+  }
+
+  async function stExecute() {
+    setError("");
+    if (!signer || !userAddress) return setError("LINK NODE first.");
+    const cfg = activeCfg();
+
+    const taddr = (el.st_token.value || "").trim();
+    if (!isAddr(taddr)) return setError("Enter a valid token address.");
+    await loadToken(taddr);
+
+    const amt = (el.st_amount.value || "").trim();
+    const num = Number(amt);
+    if (!amt || !Number.isFinite(num) || num <= 0) return setError("Enter a valid amount.");
+
+    const vr = validateRecipients(rowsST);
+    if (!vr.ok) return setError(vr.msg);
+
+    const amountWei = ethers.utils.parseUnits(amt, tokenDecimals);
+
+    // allowance check
+    try {
+      const allow = await token.allowance(userAddress, cfg.tokenSplitter);
+      if (allow.lt(amountWei)) return setError(`Allowance too low. Approve at least ${amt} ${tokenSymbol} first.`);
+    } catch {}
+
+    try {
+      el.st_execute.disabled = true;
+      setStatus("EXECUTE SPLIT…");
+      coinBeat(vr.accounts.length);
+
+      // static call to catch reverts early
+      await tokenSplitter.callStatic.depositAndDistribute(
+        checksum(taddr),
+        vr.accounts,
+        vr.shares,
+        amountWei
+      );
+
+      const tx = await tokenSplitter.depositAndDistribute(
+        checksum(taddr),
+        vr.accounts,
+        vr.shares,
+        amountWei
+      );
+      log(`Execute tx: ${tx.hash}`);
+      await tx.wait();
+
+      setStatus("SPLIT COMPLETE ✅");
+      await refreshTelemetry();
+    } catch (e) {
+      const msg = e?.error?.message || e?.data?.message || e?.reason || e?.message || "Execute failed.";
+      setError(msg);
+    } finally {
+      el.st_execute.disabled = false;
+      updateGuards();
+    }
+  }
+
+  function updateSplitTokenEstimate() {
+    const raw = (el.st_amount.value || "").trim();
     const num = Number(raw);
-
     if (!raw || !Number.isFinite(num) || num <= 0) {
-      el.usdEst.textContent = "—";
-      el.postFeeLine.textContent = mode === "token" ? "Post-fee delivery —" : "Native delivery —";
+      el.st_usd.textContent = "—";
+      el.st_postFee.textContent = "Post-fee delivery —";
       return;
     }
-
     const afterFee = num * (1 - feeBps / 10000);
-
-    el.usdEst.textContent = `~$${num.toFixed(2)}`;
-
-    if (mode === "token") {
-      el.postFeeLine.textContent =
-        `Post-fee delivery ~ ${afterFee.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")} ${tokenSymbol}`;
-    } else {
-      el.postFeeLine.textContent = `Native delivery on ${cfgNativeSymbol()} (multi-tx mode)`;
-    }
+    el.st_usd.textContent = `~${raw} ${tokenSymbol}`;
+    el.st_postFee.textContent =
+      `Post-fee delivery ~ ${afterFee.toFixed(6).replace(/0+$/,"").replace(/\.$/,"")} ${tokenSymbol}`;
   }
 
   /***********************
-   * MODE + ACTION GUARDS
+   * NATIVE SPLIT
    ***********************/
-  function applyMode() {
-    const mode = el.selMode.value;
-
-    if (mode === "token") {
-      el.tokenBlock.style.display = "block";
-      el.modeHint.textContent = "Token mode: ARM CONTRACT → DEPLOY PAYLOAD. Fee is applied inside the splitter.";
-      el.gasHint.textContent = "Token mode uses exact token amount.";
-      el.btnApprove.style.display = "inline-block";
-      el.btnMax.disabled = true;
-    } else {
-      el.tokenBlock.style.display = "none";
-      el.modeHint.textContent = "Native distribution requires a native splitter contract for 1-tx split. Current build can do multi-tx sends.";
-      el.gasHint.textContent = "MAX reserves gas automatically for native coin.";
-      el.btnApprove.style.display = "none";
-      el.btnMax.disabled = false;
-    }
-
-    updateEstimate();
-    updateActionGuards();
-  }
-
-  function updateActionGuards() {
-    const mode = el.selMode.value;
-
-    const connected = !!userAddress && !!signer;
-    el.btnSwitch.disabled = !provider;
-    el.btnAdd.disabled = false;
-    el.btnNormalize.disabled = rows.length < 2;
-
-    if (!connected) {
-      el.btnApprove.disabled = true;
-      el.btnExecute.disabled = true;
-      return;
-    }
-
-    if (mode === "native") {
-      el.btnExecute.disabled = true;
-      el.btnApprove.disabled = true;
-      return;
-    }
-
-    const tokenOk = isAddr((el.inpToken.value || "").trim());
-    const amtOk = Number(el.inpAmount.value || 0) > 0;
-    const recOk = validateRecipients().ok;
-
-    el.btnApprove.disabled = !(tokenOk && amtOk && recOk);
-    el.btnExecute.disabled = !(tokenOk && amtOk && recOk);
-  }
-
-  /***********************
-   * MAX (native gas-safe)
-   ***********************/
-  async function setMaxGasSafe() {
+  async function snMaxGasSafe() {
     setError("");
     if (!provider || !userAddress) return setError("LINK NODE first.");
 
-    const mode = el.selMode.value;
-    if (mode !== "native") return;
-
     const cfg = activeCfg();
-
     try {
       const bal = await provider.getBalance(userAddress);
-      const reserve = ethers.utils.parseEther(currentChainKey === "eth" ? "0.005" : "0.003");
+      const reserve = ethers.utils.parseEther(currentKey === "ethereum" ? "0.005" : "0.003");
       const spendable = bal.gt(reserve) ? bal.sub(reserve) : ethers.BigNumber.from(0);
-      el.inpAmount.value = ethers.utils.formatEther(spendable);
+      const amt = ethers.utils.formatEther(spendable);
+      el.sn_amount.value = amt;
+      el.sn_maxHint.textContent = `Max set: ${amt} ${cfg.nativeSymbol}`;
       setStatus(`MAX SET (gas-safe). Reserved ${ethers.utils.formatEther(reserve)} ${cfg.nativeSymbol}`);
-      updateEstimate();
     } catch (e) {
       setError(e?.message || "Failed to compute MAX.");
     }
   }
 
-  /***********************
-   * APPROVE + EXECUTE (UNCHANGED CORE)
-   ***********************/
-  async function approveToken() {
+  async function snExecute() {
     setError("");
     if (!signer || !userAddress) return setError("LINK NODE first.");
+    const cfg = activeCfg();
 
-    if (el.selMode.value !== "token") return setError("ARM CONTRACT is token-mode only.");
-
-    const taddrRaw = (el.inpToken.value || "").trim();
-    if (!isAddr(taddrRaw)) return setError("Enter a valid asset contract address.");
-
-    await loadToken(taddrRaw);
-
-    const amt = (el.inpAmount.value || "").trim();
+    const amt = (el.sn_amount.value || "").trim();
     const num = Number(amt);
-    if (!amt || !Number.isFinite(num) || num <= 0) return setError("Enter a valid payload amount.");
+    if (!amt || !Number.isFinite(num) || num <= 0) return setError("Enter a valid native amount.");
 
-    const vr = validateRecipients();
+    const vr = validateRecipients(rowsSN);
     if (!vr.ok) return setError(vr.msg);
 
-    const cfg = activeCfg();
-    const amountWei = ethers.utils.parseUnits(amt, tokenDecimals);
+    const valueWei = ethers.utils.parseEther(amt);
 
     try {
-      el.btnApprove.disabled = true;
-      setStatus(`ARMING ${tokenSymbol}…`);
+      el.sn_execute.disabled = true;
+      setStatus("EXECUTE NATIVE SPLIT…");
+      coinBeat(vr.accounts.length);
 
-      const tx = await token.approve(cfg.splitter, amountWei);
-      log(`ARM tx: ${tx.hash}`);
+      await nativeSplitter.callStatic.distributeNative(vr.accounts, vr.shares, { value: valueWei });
+      const tx = await nativeSplitter.distributeNative(vr.accounts, vr.shares, { value: valueWei });
+      log(`Native split tx: ${tx.hash}`);
       await tx.wait();
 
-      setStatus("ARMED ✅");
+      setStatus("NATIVE SPLIT COMPLETE ✅");
       await refreshTelemetry();
     } catch (e) {
-      setError(e?.data?.message || e?.message || "ARM failed.");
+      const msg = e?.error?.message || e?.data?.message || e?.reason || e?.message || "Native split failed.";
+      setError(msg);
     } finally {
-      el.btnApprove.disabled = false;
-      updateActionGuards();
+      el.sn_execute.disabled = false;
+      updateGuards();
     }
-  }
-
-  function buildModalSummary({ taddr, amt, accounts, shares }) {
-    const cfg = activeCfg();
-    const feePct = (feeBps / 100).toFixed(2).replace(/\.00$/, "");
-    const afterFee = Number(amt) * (1 - feeBps / 10000);
-
-    const wSum = shares.reduce((a, b) => a + Number(b.toString()), 0);
-    const lines = accounts.map((a, i) => {
-      const w = Number(shares[i].toString());
-      const est = wSum ? (afterFee * (w / wSum)) : 0;
-      return `• ${shortAddr(a)} ← ~${est.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")} ${tokenSymbol}`;
-    }).join("<br/>");
-
-    return `
-<b>THEATER:</b> ${cfg.chainName}<br/>
-<b>ASSET:</b> ${tokenSymbol} <span style="opacity:.65;">(${shortAddr(taddr)})</span><br/>
-<b>PAYLOAD:</b> ${amt} ${tokenSymbol}<br/>
-<b>FEE:</b> ${feePct}% → ${feeWallet ? shortAddr(feeWallet) : "feeWallet"}<br/>
-<b>DELIVERY (post-fee):</b> ~${afterFee.toFixed(6).replace(/0+$/, "").replace(/\.$/, "")} ${tokenSymbol}<br/>
-<div class="hr"></div>
-<b>TARGET MATRIX:</b><br/>
-${lines}<br/>
-<div class="hr"></div>
-<span style="opacity:.75;">Funds deliver on <b>${cfg.chainName}</b>. Recipients must view the same chain in their wallet.</span>
-`;
-  }
-
-  function openModal(html) {
-    el.modalBody.innerHTML = html;
-    el.chkAcknowledge.checked = false;
-    el.modal.style.display = "block";
-  }
-  function closeModal() {
-    el.modal.style.display = "none";
-  }
-
-  async function executeSplit() {
-    setError("");
-    if (!signer || !userAddress) return setError("LINK NODE first.");
-
-    if (el.selMode.value !== "token") {
-      return setError("Native multi-tx mode is not enabled in this build. Token distribution is online.");
-    }
-
-    const cfg = activeCfg();
-    const taddrRaw = (el.inpToken.value || "").trim();
-    if (!isAddr(taddrRaw)) return setError("Enter a valid asset contract address.");
-
-    await loadToken(taddrRaw);
-
-    const amt = (el.inpAmount.value || "").trim();
-    const num = Number(amt);
-    if (!amt || !Number.isFinite(num) || num <= 0) return setError("Enter a valid payload amount.");
-
-    const vr = validateRecipients();
-    if (!vr.ok) return setError(vr.msg);
-
-    const amountWei = ethers.utils.parseUnits(amt, tokenDecimals);
-    try {
-      const allow = await token.allowance(userAddress, cfg.splitter);
-      if (allow.lt(amountWei)) return setError(`Allowance too low. ARM at least ${amt} ${tokenSymbol} first.`);
-      if (operatorMode) log(`ALLOWANCE OK ✅ ${ethers.utils.formatUnits(allow, tokenDecimals)} ${tokenSymbol}`);
-    } catch {
-      // ignore
-    }
-
-    openModal(buildModalSummary({ taddr: ethers.utils.getAddress(taddrRaw), amt, accounts: vr.accounts, shares: vr.shares }));
-
-    el.btnModalConfirm.onclick = async () => {
-      if (!el.chkAcknowledge.checked) return setError("Acknowledge chain-locked delivery to proceed.");
-      setError("");
-      closeModal();
-
-      try {
-        el.btnExecute.disabled = true;
-        setStatus("DEPLOYING…");
-
-        coinBeat(vr.accounts.length);
-
-        await splitter.callStatic.depositAndDistribute(
-          ethers.utils.getAddress(taddrRaw),
-          vr.accounts,
-          vr.shares,
-          amountWei
-        );
-
-        const tx = await splitter.depositAndDistribute(
-          ethers.utils.getAddress(taddrRaw),
-          vr.accounts,
-          vr.shares,
-          amountWei
-        );
-
-        lastTxHash = tx.hash;
-        lastExplorerLink = `${cfg.explorer}/tx/${tx.hash}`;
-
-        log(`DEPLOY tx: ${tx.hash}`);
-        setStatus("AWAITING CONFIRMATION…");
-
-        await tx.wait();
-        setStatus("DEPLOYMENT SUCCESS ✅");
-
-        const transfersHint = `
-<b>TX:</b> <a href="${lastExplorerLink}" target="_blank" rel="noreferrer">View on Explorer</a><br/>
-<span style="opacity:.75;">On BSC/Polygon, view <b>Token Transfers</b> tab to see recipient payouts.</span>
-`;
-
-        setDebrief(
-          `<b>DEPLOYMENT SUCCESSFUL</b><br/>
-           <span style="opacity:.75;">THEATER:</span> ${cfg.chainName}<br/>
-           <span style="opacity:.75;">ASSET:</span> ${tokenSymbol} <span style="opacity:.6;">(${shortAddr(tokenAddr)})</span><br/>
-           <span style="opacity:.75;">FEE:</span> ${(feeBps/100).toFixed(2).replace(/\.00$/,"")}% → ${feeWallet ? shortAddr(feeWallet) : "feeWallet"}<br/>
-           <div class="hr"></div>
-           ${transfersHint}`
-        );
-
-        await refreshTelemetry();
-      } catch (e) {
-        const msg =
-          e?.error?.message ||
-          e?.data?.message ||
-          e?.reason ||
-          e?.message ||
-          "DEPLOY failed.";
-        setError(msg);
-      } finally {
-        el.btnExecute.disabled = false;
-        updateActionGuards();
-      }
-    };
   }
 
   /***********************
-   * Add token to wallet (MetaMask)
+   * TOKEN VAULT (approve + create + timer + execute)
    ***********************/
-  async function addTokenToWallet() {
+  async function vtApprove() {
     setError("");
-    if (!window.ethereum) return setError("No wallet provider.");
-    if (!tokenAddr || !tokenSymbol) return setError("Load an asset first.");
+    if (!signer || !userAddress) return setError("LINK NODE first.");
+    const cfg = activeCfg();
+
+    const taddr = (el.vt_token.value || "").trim();
+    if (!isAddr(taddr)) return setError("Enter a valid token address.");
+    await loadToken(taddr);
+
+    const amt = (el.vt_amount.value || "").trim();
+    const num = Number(amt);
+    if (!amt || !Number.isFinite(num) || num <= 0) return setError("Enter a valid lock amount.");
+
+    const vr = validateRecipients(rowsVT);
+    if (!vr.ok) return setError(vr.msg);
+
+    const amountWei = ethers.utils.parseUnits(amt, tokenDecimals);
 
     try {
-      await window.ethereum.request({
-        method: "wallet_watchAsset",
-        params: {
-          type: "ERC20",
-          options: {
-            address: tokenAddr,
-            symbol: (tokenSymbol || "TOKEN").slice(0, 11),
-            decimals: tokenDecimals,
-          },
-        },
-      });
-      setStatus("Token prompt sent to wallet ✅");
+      el.vt_approve.disabled = true;
+      setStatus(`APPROVING ${tokenSymbol} → Vault ${shortAddr(cfg.tokenVault)}…`);
+
+      // IMPORTANT: spender is TOKEN VAULT here
+      const tx = await token.approve(cfg.tokenVault, amountWei);
+      log(`Vault approve tx: ${tx.hash}`);
+      await tx.wait();
+
+      setStatus("VAULT APPROVE CONFIRMED ✅");
+      await refreshTelemetry();
     } catch (e) {
-      setError(e?.message || "Token add request failed.");
+      setError(e?.data?.message || e?.message || "Vault approve failed.");
+    } finally {
+      el.vt_approve.disabled = false;
+      updateGuards();
     }
   }
 
-  function viewLastTx() {
+  async function vtCreate() {
     setError("");
-    if (!lastExplorerLink) return setError("No recent deployment found.");
-    window.open(lastExplorerLink, "_blank", "noopener,noreferrer");
+    if (!signer || !userAddress) return setError("LINK NODE first.");
+    const cfg = activeCfg();
+
+    const taddr = (el.vt_token.value || "").trim();
+    if (!isAddr(taddr)) return setError("Enter a valid token address.");
+    await loadToken(taddr);
+
+    const amt = (el.vt_amount.value || "").trim();
+    const num = Number(amt);
+    if (!amt || !Number.isFinite(num) || num <= 0) return setError("Enter a valid lock amount.");
+
+    const period = clampInt(el.vt_period.value || "0", 1, 315360000);
+    if (period <= 0) return setError("Enter inactivity seconds (e.g. 120).");
+
+    const safeRaw = (el.vt_safe.value || "").trim();
+    const safe = safeRaw ? (isAddr(safeRaw) ? checksum(safeRaw) : null) : ethers.constants.AddressZero;
+    if (safeRaw && !safe) return setError("Safe wallet is not a valid address.");
+
+    const vr = validateRecipients(rowsVT);
+    if (!vr.ok) return setError(vr.msg);
+
+    const amountWei = ethers.utils.parseUnits(amt, tokenDecimals);
+
+    // allowance check
+    try {
+      const allow = await token.allowance(userAddress, cfg.tokenVault);
+      if (allow.lt(amountWei)) return setError(`Allowance too low. Approve vault for ${amt} ${tokenSymbol} first.`);
+    } catch {}
+
+    try {
+      el.vt_create.disabled = true;
+      setStatus("CREATING TOKEN VAULT…");
+
+      const tx = await tokenVault.createVault(
+        checksum(taddr),
+        amountWei,
+        vr.accounts,
+        vr.shares,
+        period,
+        safe
+      );
+      log(`Create vault tx: ${tx.hash}`);
+      const receipt = await tx.wait();
+
+      setStatus("TOKEN VAULT CREATED ✅");
+
+      // user can copy/paste vault id from events later; for now we just tell them to load by id
+      el.vt_timerBox.textContent = "Vault created. Enter Vault ID and press LOAD.";
+      await refreshTelemetry();
+    } catch (e) {
+      const msg = e?.error?.message || e?.data?.message || e?.reason || e?.message || "Create vault failed.";
+      setError(msg);
+    } finally {
+      el.vt_create.disabled = false;
+      updateGuards();
+    }
+  }
+
+  async function vtLoad() {
+    setError("");
+    if (!provider) return setError("LINK NODE first.");
+    const id = clampInt(el.vt_vaultId.value || "0", 0, 10_000_000);
+    try {
+      const v = await tokenVault.getVault(id);
+      startVaultTimer("token", id, v.heartbeat, v.inactivityPeriod, v.executed, v.frozen);
+      setStatus(`TOKEN VAULT LOADED: #${id}`);
+    } catch (e) {
+      setError(e?.message || "Failed to load vault.");
+    }
+  }
+
+  async function vtPing() {
+    setError("");
+    if (!signer) return setError("LINK NODE first.");
+    const id = clampInt(el.vt_vaultId.value || "0", 0, 10_000_000);
+    try {
+      const tx = await tokenVault.ping(id);
+      log(`Ping tx: ${tx.hash}`);
+      await tx.wait();
+      setStatus("PING CONFIRMED ✅");
+      await vtLoad();
+    } catch (e) { setError(e?.data?.message || e?.message || "Ping failed."); }
+  }
+  async function vtFreeze() {
+    setError("");
+    if (!signer) return setError("LINK NODE first.");
+    const id = clampInt(el.vt_vaultId.value || "0", 0, 10_000_000);
+    try {
+      const tx = await tokenVault.freezeVault(id);
+      log(`Freeze tx: ${tx.hash}`);
+      await tx.wait();
+      setStatus("FROZEN ✅");
+      await vtLoad();
+    } catch (e) { setError(e?.data?.message || e?.message || "Freeze failed."); }
+  }
+  async function vtUnfreeze() {
+    setError("");
+    if (!signer) return setError("LINK NODE first.");
+    const id = clampInt(el.vt_vaultId.value || "0", 0, 10_000_000);
+    try {
+      const tx = await tokenVault.unfreezeVault(id);
+      log(`Unfreeze tx: ${tx.hash}`);
+      await tx.wait();
+      setStatus("UNFROZEN ✅");
+      await vtLoad();
+    } catch (e) { setError(e?.data?.message || e?.message || "Unfreeze failed."); }
+  }
+  async function vtExecuteInheritance() {
+    setError("");
+    if (!signer) return setError("LINK NODE first.");
+    const id = clampInt(el.vt_vaultId.value || "0", 0, 10_000_000);
+    try {
+      const tx = await tokenVault.executeInheritance(id);
+      log(`ExecuteInheritance tx: ${tx.hash}`);
+      await tx.wait();
+      setStatus("INHERITANCE EXECUTED ✅");
+      await vtLoad();
+      await refreshTelemetry();
+    } catch (e) {
+      setError(e?.error?.message || e?.data?.message || e?.reason || e?.message || "ExecuteInheritance failed.");
+    }
+  }
+
+  /***********************
+   * NATIVE VAULT (create/deposit/execute + timer)
+   ***********************/
+  async function vnCreate() {
+    setError("");
+    if (!signer || !userAddress) return setError("LINK NODE first.");
+
+    const execRaw = (el.vn_executor.value || "").trim();
+    if (!isAddr(execRaw)) return setError("Executor must be a valid address.");
+
+    const safeRaw = (el.vn_safe.value || "").trim();
+    if (!isAddr(safeRaw)) return setError("Safe wallet must be a valid address.");
+
+    const period = clampInt(el.vn_period.value || "0", 1, 315360000);
+    if (period <= 0) return setError("Enter inactivity seconds (e.g. 120).");
+
+    try {
+      el.vn_create.disabled = true;
+      setStatus("CREATING NATIVE VAULT…");
+
+      const tx = await nativeVault.createVault(checksum(execRaw), period, checksum(safeRaw));
+      log(`Create native vault tx: ${tx.hash}`);
+      await tx.wait();
+
+      setStatus("NATIVE VAULT CREATED ✅");
+      el.vn_timerBox.textContent = "Vault created. Enter Vault ID and press LOAD.";
+    } catch (e) {
+      setError(e?.error?.message || e?.data?.message || e?.reason || e?.message || "Create native vault failed.");
+    } finally {
+      el.vn_create.disabled = false;
+    }
+  }
+
+  async function vnLoad() {
+    setError("");
+    if (!provider) return setError("LINK NODE first.");
+    const id = clampInt(el.vn_vaultId.value || "0", 0, 10_000_000);
+    try {
+      const v = await nativeVault.getVault(id);
+      startVaultTimer("native", id, v.heartbeat, v.inactivityPeriod, v.executed, v.frozen, v.executor);
+      setStatus(`NATIVE VAULT LOADED: #${id}`);
+    } catch (e) {
+      setError(e?.message || "Failed to load native vault.");
+    }
+  }
+
+  async function vnDeposit() {
+    setError("");
+    if (!signer) return setError("LINK NODE first.");
+    const id = clampInt(el.vn_vaultId.value || "0", 0, 10_000_000);
+    const amt = (el.vn_depositAmt.value || "").trim();
+    const num = Number(amt);
+    if (!amt || !Number.isFinite(num) || num <= 0) return setError("Enter a valid deposit amount.");
+    const valueWei = ethers.utils.parseEther(amt);
+    try {
+      el.vn_deposit.disabled = true;
+      setStatus("DEPOSITING…");
+      const tx = await nativeVault.deposit(id, { value: valueWei });
+      log(`Deposit tx: ${tx.hash}`);
+      await tx.wait();
+      setStatus("DEPOSIT CONFIRMED ✅");
+      await vnLoad();
+      await refreshTelemetry();
+    } catch (e) {
+      setError(e?.error?.message || e?.data?.message || e?.reason || e?.message || "Deposit failed.");
+    } finally {
+      el.vn_deposit.disabled = false;
+    }
+  }
+
+  async function vnPing() {
+    setError("");
+    if (!signer) return setError("LINK NODE first.");
+    const id = clampInt(el.vn_vaultId.value || "0", 0, 10_000_000);
+    try {
+      const tx = await nativeVault.ping(id);
+      log(`Ping tx: ${tx.hash}`);
+      await tx.wait();
+      setStatus("PING CONFIRMED ✅");
+      await vnLoad();
+    } catch (e) { setError(e?.data?.message || e?.message || "Ping failed."); }
+  }
+  async function vnFreeze() {
+    setError("");
+    if (!signer) return setError("LINK NODE first.");
+    const id = clampInt(el.vn_vaultId.value || "0", 0, 10_000_000);
+    try {
+      const tx = await nativeVault.freeze(id);
+      log(`Freeze tx: ${tx.hash}`);
+      await tx.wait();
+      setStatus("FROZEN ✅");
+      await vnLoad();
+    } catch (e) { setError(e?.data?.message || e?.message || "Freeze failed."); }
+  }
+  async function vnUnfreeze() {
+    setError("");
+    if (!signer) return setError("LINK NODE first.");
+    const id = clampInt(el.vn_vaultId.value || "0", 0, 10_000_000);
+    try {
+      const tx = await nativeVault.unfreeze(id);
+      log(`Unfreeze tx: ${tx.hash}`);
+      await tx.wait();
+      setStatus("UNFROZEN ✅");
+      await vnLoad();
+    } catch (e) { setError(e?.data?.message || e?.message || "Unfreeze failed."); }
+  }
+  async function vnEmergency() {
+    setError("");
+    if (!signer) return setError("LINK NODE first.");
+    const id = clampInt(el.vn_vaultId.value || "0", 0, 10_000_000);
+    try {
+      const tx = await nativeVault.emergencyMoveToSafe(id);
+      log(`Emergency tx: ${tx.hash}`);
+      await tx.wait();
+      setStatus("EMERGENCY MOVE COMPLETE ✅");
+      await vnLoad();
+      await refreshTelemetry();
+    } catch (e) {
+      setError(e?.error?.message || e?.data?.message || e?.reason || e?.message || "Emergency move failed.");
+    }
+  }
+
+  async function vnExecute() {
+    setError("");
+    if (!signer) return setError("LINK NODE first.");
+    const id = clampInt(el.vn_vaultId.value || "0", 0, 10_000_000);
+
+    const vr = validateRecipients(rowsVN);
+    if (!vr.ok) return setError(vr.msg);
+
+    try {
+      el.vn_execute.disabled = true;
+      setStatus("EXECUTING NATIVE VAULT…");
+      coinBeat(vr.accounts.length);
+
+      const tx = await nativeVault.execute(id, vr.accounts, vr.shares);
+      log(`Execute vault tx: ${tx.hash}`);
+      await tx.wait();
+
+      setStatus("NATIVE VAULT EXECUTED ✅");
+      await vnLoad();
+      await refreshTelemetry();
+    } catch (e) {
+      setError(e?.error?.message || e?.data?.message || e?.reason || e?.message || "Vault execute failed.");
+    } finally {
+      el.vn_execute.disabled = false;
+    }
+  }
+
+  /***********************
+   * VAULT TIMER ENGINE
+   ***********************/
+  function stopTimer() {
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = null;
+  }
+
+  function startVaultTimer(kind, vaultId, heartbeat, inactivity, executed, frozen, executorAddr) {
+    stopTimer();
+
+    function paint() {
+      const hb = Number(heartbeat);
+      const per = Number(inactivity);
+      const unlockAt = hb + per;
+      const now = nowSec();
+      const remaining = unlockAt - now;
+
+      const unlocked = remaining <= 0;
+
+      const header = `Vault #${vaultId} • ${kind.toUpperCase()} • ${frozen ? "FROZEN" : "ACTIVE"} • ${executed ? "EXECUTED" : (unlocked ? "UNLOCKED" : "LOCKED")}`;
+      const line1 = `Last heartbeat: ${fmtLocalTimeFromUnix(hb)} (unix ${hb})`;
+      const line2 = `Unlock time: ${fmtLocalTimeFromUnix(unlockAt)} (unix ${unlockAt})`;
+      const line3 = executed ? `Status: executed` : (unlocked ? `Unlocked: YES` : `Countdown: ${fmtCountdown(remaining)}`);
+
+      const extra = executorAddr ? `Executor: ${shortAddr(executorAddr)}` : "";
+
+      const text = `${header}\n${line1}\n${line2}\n${line3}${extra ? `\n${extra}` : ""}`;
+
+      if (kind === "token") el.vt_timerBox.textContent = text;
+      else el.vn_timerBox.textContent = text;
+    }
+
+    paint();
+    timerInterval = setInterval(paint, 1000);
+  }
+
+  /***********************
+   * UI TABS / OPERATOR MODE
+   ***********************/
+  function setTab(tabKey) {
+    activeTab = tabKey;
+
+    for (const k of Object.keys(el.panes)) {
+      el.panes[k].style.display = (k === tabKey) ? "block" : "none";
+    }
+    el.tabs.forEach(t => t.classList.toggle("active", t.dataset.tab === tabKey));
+
+    el.teleActive.textContent = activeContractForTab();
+    setStatus(`TAB: ${tabKey.toUpperCase()}`);
+    setError("");
+    updateGuards();
+    refreshTelemetry().catch(()=>{});
+  }
+
+  function applyOperatorMode() {
+    const op = !!el.chkOperator.checked;
+    // In simple mode, we keep the right card visible but still clean.
+    // Operator mode just means we allow more buttons & telemetry info stays.
+    // (If you later want to hide the entire right panel in simple mode, I can do that too.)
+    setStatus(op ? "OPERATOR CONSOLE: ON" : "SIMPLE MODE: ON");
+  }
+
+  /***********************
+   * GUARDS (prevents broken approve/execute)
+   ***********************/
+  function updateGuards() {
+    const connected = !!signer && !!userAddress;
+
+    // chain switch & connect
+    el.btnSwitch.disabled = !provider;
+    // token split
+    el.st_approve.disabled = !connected;
+    el.st_execute.disabled = !connected;
+
+    // native split
+    el.sn_execute.disabled = !connected;
+
+    // token vault
+    el.vt_approve.disabled = !connected;
+    el.vt_create.disabled = !connected;
+    el.vt_ping.disabled = !connected;
+    el.vt_freeze.disabled = !connected;
+    el.vt_unfreeze.disabled = !connected;
+    el.vt_execute.disabled = !connected;
+
+    // native vault
+    el.vn_create.disabled = !connected;
+    el.vn_deposit.disabled = !connected;
+    el.vn_ping.disabled = !connected;
+    el.vn_freeze.disabled = !connected;
+    el.vn_unfreeze.disabled = !connected;
+    el.vn_emergency.disabled = !connected;
+    el.vn_execute.disabled = !connected;
   }
 
   /***********************
    * EVENTS
    ***********************/
   function bindEvents() {
-    el.btnConnect.addEventListener("click", () => connectWallet());
-    el.btnSwitch.addEventListener("click", () => switchNetwork());
+    // tabs
+    el.tabs.forEach(btn => btn.addEventListener("click", () => setTab(btn.dataset.tab)));
 
-    if (el.btnToggleOps) {
-      el.btnToggleOps.addEventListener("click", () => applyOperatorMode(!operatorMode));
-    }
+    // connect/switch
+    el.btnConnect.addEventListener("click", connectWallet);
+    el.btnSwitch.addEventListener("click", switchNetwork);
+    el.selChain.addEventListener("change", () => { if (provider) switchNetwork(); });
 
-    el.selChain.addEventListener("change", () => {
-      if (provider) switchNetwork();
-    });
+    // operator mode
+    el.chkOperator.addEventListener("change", applyOperatorMode);
 
-    el.selMode.addEventListener("change", applyMode);
+    // refresh/log clear
+    el.btnRefresh.addEventListener("click", refreshTelemetry);
+    el.btnClear.addEventListener("click", () => { el.log.textContent = ""; setError(""); setStatus("Log cleared."); });
 
-    el.inpToken.addEventListener("input", async () => {
-      const v = (el.inpToken.value || "").trim();
-      if (isAddr(v)) await loadToken(v);
-      await refreshTelemetry();
-    });
+    // token load triggers
+    el.st_token.addEventListener("input", async () => { const v=el.st_token.value.trim(); if (isAddr(v)) await loadToken(v); refreshTelemetry(); });
+    el.vt_token.addEventListener("input", async () => { const v=el.vt_token.value.trim(); if (isAddr(v)) await loadToken(v); refreshTelemetry(); });
 
-    el.inpAmount.addEventListener("input", () => {
-      updateEstimate();
-      updateActionGuards();
-    });
+    el.st_amount.addEventListener("input", () => updateSplitTokenEstimate());
 
-    el.btnMax.addEventListener("click", () => setMaxGasSafe());
-    el.btnNormalize.addEventListener("click", () => normalizeShares());
+    // recipients UI init
+    renderRecipients(el.st_recipients, rowsST, el.st_vector, updateGuards);
+    renderRecipients(el.sn_recipients, rowsSN, el.sn_vector, updateGuards);
+    renderRecipients(el.vt_recipients, rowsVT, el.vt_vector, updateGuards);
+    renderRecipients(el.vn_recipients, rowsVN, el.vn_vector, updateGuards);
 
-    el.btnAdd.addEventListener("click", () => {
-      rows.push({ account: "", share: "10" });
-      renderRecipients();
-    });
+    // add buttons
+    el.st_add.addEventListener("click", () => { rowsST.push({account:"",share:"10"}); renderRecipients(el.st_recipients, rowsST, el.st_vector, updateGuards); });
+    el.sn_add.addEventListener("click", () => { rowsSN.push({account:"",share:"10"}); renderRecipients(el.sn_recipients, rowsSN, el.sn_vector, updateGuards); });
+    el.vt_add.addEventListener("click", () => { rowsVT.push({account:"",share:"10"}); renderRecipients(el.vt_recipients, rowsVT, el.vt_vector, updateGuards); });
+    el.vn_add.addEventListener("click", () => { rowsVN.push({account:"",share:"10"}); renderRecipients(el.vn_recipients, rowsVN, el.vn_vector, updateGuards); });
 
-    el.btnApprove.addEventListener("click", () => approveToken());
-    el.btnExecute.addEventListener("click", () => executeSplit());
+    // normalize
+    el.st_normalize.addEventListener("click", () => normalizeModel(rowsST, el.st_recipients, el.st_vector, updateGuards));
+    el.sn_normalize.addEventListener("click", () => normalizeModel(rowsSN, el.sn_recipients, el.sn_vector, updateGuards));
+    el.vt_normalize.addEventListener("click", () => normalizeModel(rowsVT, el.vt_recipients, el.vt_vector, updateGuards));
+    el.vn_normalize.addEventListener("click", () => normalizeModel(rowsVN, el.vn_recipients, el.vn_vector, updateGuards));
 
-    el.btnAddToken.addEventListener("click", () => addTokenToWallet());
-    el.btnViewTx.addEventListener("click", () => viewLastTx());
+    // token split actions
+    el.st_approve.addEventListener("click", stApprove);
+    el.st_execute.addEventListener("click", stExecute);
 
-    el.btnRefresh.addEventListener("click", () => refreshTelemetry());
-    el.btnClear.addEventListener("click", () => {
-      el.log.textContent = "";
-      setError("");
-      setDebrief("");
-      setStatus("Log cleared.");
-    });
+    // native split actions
+    el.sn_max.addEventListener("click", snMaxGasSafe);
+    el.sn_execute.addEventListener("click", snExecute);
 
-    el.btnModalClose.addEventListener("click", () => closeModal());
-    el.btnModalBack.addEventListener("click", () => closeModal());
-    el.modal.addEventListener("click", (e) => {
-      if (e.target === el.modal) closeModal();
-    });
+    // token vault actions
+    el.vt_approve.addEventListener("click", vtApprove);
+    el.vt_create.addEventListener("click", vtCreate);
+    el.vt_load.addEventListener("click", vtLoad);
+    el.vt_ping.addEventListener("click", vtPing);
+    el.vt_freeze.addEventListener("click", vtFreeze);
+    el.vt_unfreeze.addEventListener("click", vtUnfreeze);
+    el.vt_execute.addEventListener("click", vtExecuteInheritance);
 
+    // native vault actions
+    el.vn_create.addEventListener("click", vnCreate);
+    el.vn_load.addEventListener("click", vnLoad);
+    el.vn_deposit.addEventListener("click", vnDeposit);
+    el.vn_ping.addEventListener("click", vnPing);
+    el.vn_freeze.addEventListener("click", vnFreeze);
+    el.vn_unfreeze.addEventListener("click", vnUnfreeze);
+    el.vn_emergency.addEventListener("click", vnEmergency);
+    el.vn_execute.addEventListener("click", vnExecute);
+
+    // metamask events
     if (window.ethereum) {
       window.ethereum.on("accountsChanged", async (accs) => {
         setError("");
         if (!accs || !accs.length) {
-          userAddress = null;
-          signer = null;
+          userAddress = null; signer = null;
           el.pillWallet.textContent = "NODE: DISCONNECTED";
           el.btnConnect.textContent = "LINK NODE";
           el.btnConnect.classList.remove("connected");
           el.btnConnect.classList.add("gold");
           el.btnConnect.disabled = false;
-          setDebrief("");
+          stopTimer();
           setStatus("NODE DISCONNECTED.");
-          updateActionGuards();
+          updateGuards();
           return;
         }
         userAddress = accs[0];
         el.pillWallet.textContent = `NODE: ${shortAddr(userAddress)}`;
-        log(`WALLET CHANGED ✅ ${userAddress}`);
         setStatus(`NODE CHANGED: ${userAddress}`);
         await refreshTelemetry();
       });
@@ -972,19 +1265,10 @@ ${lines}<br/>
    ***********************/
   async function boot() {
     try {
-      // Default UI mode: SIMPLE unless saved
-      const saved = (() => { try { return localStorage.getItem("ZC_OPS"); } catch { return null; } })();
-      applyOperatorMode(saved === "1");
-
-      renderRecipients();
-      applyMode();
-
-      currentChainKey = el.selChain.value || "bsc";
-      el.pillNet.textContent = `THEATER: ${activeCfg().chainName}`;
-      el.teleSplitter.textContent = activeCfg().splitter;
-      el.teleFee.textContent = "—";
-
       bindEvents();
+      setTab("split-token");
+      applyOperatorMode();
+      updateGuards();
       setStatus("CITADEL ONLINE. LINK NODE to begin.");
 
       // silent connect if already authorized
@@ -1001,16 +1285,12 @@ ${lines}<br/>
           el.btnConnect.classList.add("connected");
           el.btnConnect.disabled = true;
 
-          log(`WALLET CONNECTED ✅ ${userAddress}`);
-
           await syncChainFromWallet();
           await initContracts();
           await refreshTelemetry();
           setStatus("AUTO-LINKED ✅");
         }
       }
-
-      updateActionGuards();
     } catch (e) {
       setError(e?.message || "Boot error.");
     }
