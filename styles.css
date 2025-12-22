@@ -408,3 +408,23 @@ input:focus, select:focus{
   color: rgba(255,255,255,.75);
 }
 .soundToggle input{ width:auto; }
+/* --- FIX: prevent long contract addresses from overflowing telemetry boxes --- */
+.teleBox { min-width: 0; } /* critical for grid children */
+.teleV { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Only ACTIVE CONTRACT should wrap */
+#teleActive {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.25;
+}
+
+/* --- UX: clickable copy targets --- */
+.copyable { cursor: pointer; }
+.copyable:hover { filter: brightness(1.08); }
+
+/* --- UX: invalid recipient fields --- */
+input.invalid {
+  border-color: rgba(255,77,77,.55) !important;
+  box-shadow: 0 0 0 2px rgba(255,77,77,.10);
+}
